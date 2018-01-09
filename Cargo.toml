@@ -1,0 +1,9 @@
+[package]
+name = "jas"
+version = "0.1.0"
+authors = ["Miguel Young <mcyoung@mit.edu>"]
+
+[dependencies]
+classfile = { path = "classfile" }
+
+[workspace]

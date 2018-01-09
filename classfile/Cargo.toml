@@ -1,0 +1,7 @@
+[package]
+name = "classfile"
+version = "0.1.0"
+authors = ["Miguel Young <mcyoung@mit.edu>"]
+
+[dependencies]
+byteorder = "1.2.1"
