@@ -14,7 +14,7 @@ macro_rules! invalid_data {
 pub fn parse_class<R: Read>(bytes: &mut R) -> Result<Class> {
 
     let magic = bytes.read_u32::<BigEndian>()?;
-    if magic != consts::MAGIC {
+    if magic != consts::class::MAGIC {
         Err(invalid_data!("classfile did not start with magic bytes"))?;
     }
 
@@ -180,9 +180,10 @@ fn parse_attribute<R: Read>(bytes: &mut R, index: u16, constants: &Vec<Constant>
         _ => Err(invalid_data!("attribute {}'s name points to non-Utf8 constant {}", index, name_index.0))?,
     };
 
+    use consts::attribute as attr;
     let info = match name {
-        "ConstantValue" => AttributeInfo::ConstantValue(bytes.read_constant_index()?),
-        "Code" => {
+        attr::ATTR_CONSTANT_VALUE => AttributeInfo::ConstantValue(bytes.read_constant_index()?),
+        attr::ATTR_CODE => {
             let max_stack = bytes.read_code_index()?;
             let max_locals = bytes.read_code_index()?;
             let code_len = bytes.read_u32::<BigEndian>()?;
@@ -211,7 +212,7 @@ fn parse_attribute<R: Read>(bytes: &mut R, index: u16, constants: &Vec<Constant>
             }
         },
         /*"StackMapTable" => unimplemented!(),*/
-        "Exceptions" => {
+        attr::ATTR_EXCEPTIONS => {
             let num_exceptions = bytes.read_u16::<BigEndian>()?;
             let mut exceptions = Vec::with_capacity(num_exceptions as usize);
             for _ in 0..num_exceptions {
@@ -219,7 +220,7 @@ fn parse_attribute<R: Read>(bytes: &mut R, index: u16, constants: &Vec<Constant>
             }
             AttributeInfo::Exceptions(exceptions)
         },
-        "InnerClasses" => {
+        attr::ATTR_INNER_CLASSES => {
             let num_classes = bytes.read_u16::<BigEndian>()?;
             let mut classes = Vec::with_capacity(num_classes as usize);
             for _ in 0..num_classes {
@@ -234,19 +235,19 @@ fn parse_attribute<R: Read>(bytes: &mut R, index: u16, constants: &Vec<Constant>
             }
             AttributeInfo::InnerClasses(classes)
         },
-        "EnclosingMethod" => AttributeInfo::EnclosingMethod {
+        attr::ATTR_ENCLOSING_METHOD => AttributeInfo::EnclosingMethod {
             class: bytes.read_constant_index()?,
             method: bytes.read_constant_index()?,
         },
-        "Synthetic" => AttributeInfo::Synthetic,
-        "Signature" => AttributeInfo::Signature(bytes.read_constant_index()?),
-        "SourceFile" => AttributeInfo::SourceFile(bytes.read_constant_index()?),
-        "SourceDebugExtension" => {
+        attr::ATTR_SYNTHETIC => AttributeInfo::Synthetic,
+        attr::ATTR_SIGNATURE => AttributeInfo::Signature(bytes.read_constant_index()?),
+        attr::ATTR_SOURCE_FILE => AttributeInfo::SourceFile(bytes.read_constant_index()?),
+        attr::ATTR_SOURCE_DEBUG_EXTENSION => {
             let mut buf = vec![0; len as usize];
             bytes.read_exact(&mut buf[..])?;
             AttributeInfo::SourceDebugExtension(buf)
         },
-        "LineNumberTable" => {
+        attr::ATTR_LINE_NUMBER_TABLE => {
             let num_line_numbers = bytes.read_u16::<BigEndian>()?;
             let mut line_numbers = Vec::with_capacity(num_line_numbers as usize);
             for _ in 0..num_line_numbers {
@@ -258,7 +259,7 @@ fn parse_attribute<R: Read>(bytes: &mut R, index: u16, constants: &Vec<Constant>
             }
             AttributeInfo::LineNumberTable(line_numbers)
         },
-        "LocalVariableTable" => {
+        attr::ATTR_LOCAL_VARIABLE_TABLE => {
             let num_local_vars = bytes.read_u16::<BigEndian>()?;
             let mut local_vars = Vec::with_capacity(num_local_vars as usize);
             for _ in 0..num_local_vars {
@@ -275,7 +276,7 @@ fn parse_attribute<R: Read>(bytes: &mut R, index: u16, constants: &Vec<Constant>
             }
             AttributeInfo::LocalVariableTable(local_vars)
         },
-        "LocalVariableTypeTable" => {
+        attr::ATTR_LOCAL_VARIABLE_TYPE_TABLE => {
             let num_local_vars = bytes.read_u16::<BigEndian>()?;
             let mut local_vars = Vec::with_capacity(num_local_vars as usize);
             for _ in 0..num_local_vars {
@@ -292,7 +293,7 @@ fn parse_attribute<R: Read>(bytes: &mut R, index: u16, constants: &Vec<Constant>
             }
             AttributeInfo::LocalVariableTypeTable(local_vars)
         },
-        "Deprecated" => AttributeInfo::Deprecated,
+        attr::ATTR_DEPRECATED => AttributeInfo::Deprecated,
         /*
         "RuntimeVisibleAnnotations" => unimplemented!(),
         "RuntimeInvisibleAnnotations" => unimplemented!(),
@@ -334,223 +335,224 @@ fn parse_code<R: Read>(bytes: &mut R, len: u32) -> Result<Vec<Instruction>> {
 
     while bytes.count < len {
         use super::code::Instruction::*;
+        use consts::code;
         let instruction = match bytes.read_u8()? {
-            0x00 => Nop,
+            code::OPCODE_NOP => Nop,
 
-            0x01 => ConstRefNull,
-            0x02 => ConstIntM1,
-            0x03 => ConstInt0,
-            0x04 => ConstInt1,
-            0x05 => ConstInt2,
-            0x06 => ConstInt3,
-            0x07 => ConstInt4,
-            0x08 => ConstInt5,
-            0x09 => ConstLong0,
-            0x0a => ConstLong1,
-            0x0b => ConstFloat0,
-            0x0c => ConstFloat1,
-            0x0d => ConstFloat2,
-            0x0e => ConstDouble0,
-            0x0f => ConstDouble1,
+            code::OPCODE_CONST_REF_NULL => ConstRefNull,
+            code::OPCODE_CONST_INT_M1 => ConstIntM1,
+            code::OPCODE_CONST_INT_0 => ConstInt0,
+            code::OPCODE_CONST_INT_1 => ConstInt1,
+            code::OPCODE_CONST_INT_2 => ConstInt2,
+            code::OPCODE_CONST_INT_3 => ConstInt3,
+            code::OPCODE_CONST_INT_4 => ConstInt4,
+            code::OPCODE_CONST_INT_5 => ConstInt5,
+            code::OPCODE_CONST_LONG_0 => ConstLong0,
+            code::OPCODE_CONST_LONG_1 => ConstLong1,
+            code::OPCODE_CONST_FLOAT_0 => ConstFloat0,
+            code::OPCODE_CONST_FLOAT_1 => ConstFloat1,
+            code::OPCODE_CONST_FLOAT_2 => ConstFloat2,
+            code::OPCODE_CONST_DOUBLE_0 => ConstDouble0,
+            code::OPCODE_CONST_DOUBLE_1 => ConstDouble1,
 
-            0x10 => PushByte(bytes.read_i8()?),
-            0x11 => PushShort(bytes.read_i16::<BigEndian>()?),
+            code::OPCODE_PUSH_BYTE => PushByte(bytes.read_i8()?),
+            code::OPCODE_PUSH_SHORT => PushShort(bytes.read_i16::<BigEndian>()?),
 
-            0x12 => LoadConstant(bytes.read_constant_index()?),
-            0x13 => WideLoadConstant(bytes.read_wide_constant_index()?),
-            0x14 => WideLoadWideConstant(bytes.read_wide_constant_index()?),
-
-
-            0x15 => LoadInt(bytes.read_var_index()?),
-            0x16 => LoadLong(bytes.read_var_index()?),
-            0x17 => LoadFloat(bytes.read_var_index()?),
-            0x18 => LoadDouble(bytes.read_var_index()?),
-            0x19 => LoadRef(bytes.read_var_index()?),
-
-            0x1a => LoadInt0,
-            0x1b => LoadInt1,
-            0x1c => LoadInt2,
-            0x1d => LoadInt3,
-
-            0x1e => LoadLong0,
-            0x1f => LoadLong1,
-            0x20 => LoadLong2,
-            0x21 => LoadLong3,
-
-            0x22 => LoadFloat0,
-            0x23 => LoadFloat1,
-            0x24 => LoadFloat2,
-            0x25 => LoadFloat3,
-
-            0x26 => LoadDouble0,
-            0x27 => LoadDouble1,
-            0x28 => LoadDouble2,
-            0x29 => LoadDouble3,
-
-            0x2a => LoadRef0,
-            0x2b => LoadRef1,
-            0x2c => LoadRef2,
-            0x2d => LoadRef3,
-
-            0x2e => ArrayLoadInt,
-            0x2f => ArrayLoadLong,
-            0x30 => ArrayLoadFloat,
-            0x31 => ArrayLoadDouble,
-            0x32 => ArrayLoadRef,
-            0x33 => ArrayLoadByte,
-            0x34 => ArrayLoadChar,
-            0x35 => ArrayLoadShort,
+            code::OPCODE_LOAD_CONSTANT => LoadConstant(bytes.read_constant_index()?),
+            code::OPCODE_WIDE_LOAD_CONSTANT => WideLoadConstant(bytes.read_wide_constant_index()?),
+            code::OPCODE_WIDE_LOAD_WIDE_CONSTANT => WideLoadWideConstant(bytes.read_wide_constant_index()?),
 
 
-            0x36 => StoreInt(bytes.read_var_index()?),
-            0x37 => StoreLong(bytes.read_var_index()?),
-            0x38 => StoreFloat(bytes.read_var_index()?),
-            0x39 => StoreDouble(bytes.read_var_index()?),
-            0x3a => StoreRef(bytes.read_var_index()?),
+            code::OPCODE_LOAD_INT => LoadInt(bytes.read_var_index()?),
+            code::OPCODE_LOAD_LONG => LoadLong(bytes.read_var_index()?),
+            code::OPCODE_LOAD_FLOAT => LoadFloat(bytes.read_var_index()?),
+            code::OPCODE_LOAD_DOUBLE => LoadDouble(bytes.read_var_index()?),
+            code::OPCODE_LOAD_REF => LoadRef(bytes.read_var_index()?),
 
-            0x3b => StoreInt0,
-            0x3c => StoreInt1,
-            0x3d => StoreInt2,
-            0x3e => StoreInt3,
+            code::OPCODE_LOAD_INT_0 => LoadInt0,
+            code::OPCODE_LOAD_INT_1 => LoadInt1,
+            code::OPCODE_LOAD_INT_2 => LoadInt2,
+            code::OPCODE_LOAD_INT_3 => LoadInt3,
 
-            0x3f => StoreLong0,
-            0x40 => StoreLong1,
-            0x41 => StoreLong2,
-            0x42 => StoreLong3,
+            code::OPCODE_LOAD_LONG_0 => LoadLong0,
+            code::OPCODE_LOAD_LONG_1 => LoadLong1,
+            code::OPCODE_LOAD_LONG_2 => LoadLong2,
+            code::OPCODE_LOAD_LONG_3 => LoadLong3,
 
-            0x43 => StoreFloat0,
-            0x44 => StoreFloat1,
-            0x45 => StoreFloat2,
-            0x46 => StoreFloat3,
+            code::OPCODE_LOAD_FLOAT_0 => LoadFloat0,
+            code::OPCODE_LOAD_FLOAT_1 => LoadFloat1,
+            code::OPCODE_LOAD_FLOAT_2 => LoadFloat2,
+            code::OPCODE_LOAD_FLOAT_3 => LoadFloat3,
 
-            0x47 => StoreDouble0,
-            0x48 => StoreDouble1,
-            0x49 => StoreDouble2,
-            0x4a => StoreDouble3,
+            code::OPCODE_LOAD_DOUBLE_0 => LoadDouble0,
+            code::OPCODE_LOAD_DOUBLE_1 => LoadDouble1,
+            code::OPCODE_LOAD_DOUBLE_2 => LoadDouble2,
+            code::OPCODE_LOAD_DOUBLE_3 => LoadDouble3,
 
-            0x4b => StoreRef0,
-            0x4c => StoreRef1,
-            0x4d => StoreRef2,
-            0x4e => StoreRef3,
+            code::OPCODE_LOAD_REF_0 => LoadRef0,
+            code::OPCODE_LOAD_REF_1 => LoadRef1,
+            code::OPCODE_LOAD_REF_2 => LoadRef2,
+            code::OPCODE_LOAD_REF_3 => LoadRef3,
 
-            0x4f => ArrayStoreInt,
-            0x50 => ArrayStoreLong,
-            0x51 => ArrayStoreFloat,
-            0x52 => ArrayStoreDouble,
-            0x53 => ArrayStoreRef,
-            0x54 => ArrayStoreByte,
-            0x55 => ArrayStoreChar,
-            0x56 => ArrayStoreShort,
-
-
-            0x57 => Pop,
-            0x58 => DoublePop,
-
-            0x59 => Dup,
-            0x5a => DupDown,
-            0x5b => DupDoubleDown,
-            0x5c => DoubleDup,
-            0x5d => DoubleDupDown,
-            0x5e => DoubleDupDoubleDown,
-
-            0x5f => Swap,
+            code::OPCODE_ARRAY_LOAD_INT => ArrayLoadInt,
+            code::OPCODE_ARRAY_LOAD_LONG => ArrayLoadLong,
+            code::OPCODE_ARRAY_LOAD_FLOAT => ArrayLoadFloat,
+            code::OPCODE_ARRAY_LOAD_DOUBLE => ArrayLoadDouble,
+            code::OPCODE_ARRAY_LOAD_REF => ArrayLoadRef,
+            code::OPCODE_ARRAY_LOAD_BYTE => ArrayLoadByte,
+            code::OPCODE_ARRAY_LOAD_CHAR => ArrayLoadChar,
+            code::OPCODE_ARRAY_LOAD_SHORT => ArrayLoadShort,
 
 
-            0x60 => AddInt,
-            0x61 => AddLong,
-            0x62 => AddFloat,
-            0x63 => AddDouble,
+            code::OPCODE_STORE_INT => StoreInt(bytes.read_var_index()?),
+            code::OPCODE_STORE_LONG => StoreLong(bytes.read_var_index()?),
+            code::OPCODE_STORE_FLOAT => StoreFloat(bytes.read_var_index()?),
+            code::OPCODE_STORE_DOUBLE => StoreDouble(bytes.read_var_index()?),
+            code::OPCODE_STORE_REF => StoreRef(bytes.read_var_index()?),
 
-            0x64 => SubInt,
-            0x65 => SubLong,
-            0x66 => SubFloat,
-            0x67 => SubDouble,
+            code::OPCODE_STORE_INT_0 => StoreInt0,
+            code::OPCODE_STORE_INT_1 => StoreInt1,
+            code::OPCODE_STORE_INT_2 => StoreInt2,
+            code::OPCODE_STORE_INT_3 => StoreInt3,
 
-            0x68 => MulInt,
-            0x69 => MulLong,
-            0x6a => MulFloat,
-            0x6b => MulDouble,
+            code::OPCODE_STORE_LONG_0 => StoreLong0,
+            code::OPCODE_STORE_LONG_1 => StoreLong1,
+            code::OPCODE_STORE_LONG_2 => StoreLong2,
+            code::OPCODE_STORE_LONG_3 => StoreLong3,
 
-            0x6c => DivInt,
-            0x6d => DivLong,
-            0x6e => DivFloat,
-            0x6f => DivDouble,
+            code::OPCODE_STORE_FLOAT_0 => StoreFloat0,
+            code::OPCODE_STORE_FLOAT_1 => StoreFloat1,
+            code::OPCODE_STORE_FLOAT_2 => StoreFloat2,
+            code::OPCODE_STORE_FLOAT_3 => StoreFloat3,
 
-            0x70 => RemInt,
-            0x71 => RemLong,
-            0x72 => RemFloat,
-            0x73 => RemDouble,
+            code::OPCODE_STORE_DOUBLE_0 => StoreDouble0,
+            code::OPCODE_STORE_DOUBLE_1 => StoreDouble1,
+            code::OPCODE_STORE_DOUBLE_2 => StoreDouble2,
+            code::OPCODE_STORE_DOUBLE_3 => StoreDouble3,
 
-            0x74 => NegInt,
-            0x75 => NegLong,
-            0x76 => NegFloat,
-            0x77 => NegDouble,
+            code::OPCODE_STORE_REF_0 => StoreRef0,
+            code::OPCODE_STORE_REF_1 => StoreRef1,
+            code::OPCODE_STORE_REF_2 => StoreRef2,
+            code::OPCODE_STORE_REF_3 => StoreRef3,
 
-            0x78 => LeftShiftInt,
-            0x79 => LeftShiftLong,
-            0x7a => RightShiftInt,
-            0x7b => RightShiftLong,
-            0x7c => URightShiftInt,
-            0x7d => URightShiftLong,
-
-            0x7e => AndInt,
-            0x7f => AndLong,
-
-            0x80 => OrInt,
-            0x81 => OrLong,
-
-            0x82 => XorInt,
-            0x83 => XorLong,
-
-            0x84 => IncInt(bytes.read_var_index()?, bytes.read_i8()?),
+            code::OPCODE_ARRAY_STORE_INT => ArrayStoreInt,
+            code::OPCODE_ARRAY_STORE_LONG => ArrayStoreLong,
+            code::OPCODE_ARRAY_STORE_FLOAT => ArrayStoreFloat,
+            code::OPCODE_ARRAY_STORE_DOUBLE => ArrayStoreDouble,
+            code::OPCODE_ARRAY_STORE_REF => ArrayStoreRef,
+            code::OPCODE_ARRAY_STORE_BYTE => ArrayStoreByte,
+            code::OPCODE_ARRAY_STORE_CHAR => ArrayStoreChar,
+            code::OPCODE_ARRAY_STORE_SHORT => ArrayStoreShort,
 
 
-            0x85 => IntToLong,
-            0x86 => IntToFloat,
-            0x87 => IntToDouble,
-            0x88 => LongToInt,
-            0x89 => LongToFloat,
-            0x8a => LongToDouble,
-            0x8b => FloatToInt,
-            0x8c => FloatToLong,
-            0x8d => FloatToDouble,
-            0x8e => DoubleToInt,
-            0x8f => DoubleToLong,
-            0x90 => DoubleToFloat,
+            code::OPCODE_POP => Pop,
+            code::OPCODE_DOUBLE_POP => DoublePop,
 
-            0x91 => IntToByte,
-            0x92 => IntToChar,
-            0x93 => IntToShort,
+            code::OPCODE_DUP => Dup,
+            code::OPCODE_DUP_DOWN => DupDown,
+            code::OPCODE_DUP_DOUBLE_DOWN => DupDoubleDown,
+            code::OPCODE_DOUBLE_DUP => DoubleDup,
+            code::OPCODE_DOUBLE_DUP_DOWN => DoubleDupDown,
+            code::OPCODE_DOUBLE_DUP_DOUBLE_DOWN => DoubleDupDoubleDown,
+
+            code::OPCODE_SWAP => Swap,
 
 
-            0x94 => CompareLong,
-            0x95 => CompareFloatL,
-            0x96 => CompareFloatG,
-            0x97 => CompareDoubleL,
-            0x98 => CompareDoubleG,
+            code::OPCODE_ADD_INT => AddInt,
+            code::OPCODE_ADD_LONG => AddLong,
+            code::OPCODE_ADD_FLOAT => AddFloat,
+            code::OPCODE_ADD_DOUBLE => AddDouble,
 
-            0x99 => IfIntEq0(bytes.read_code_index()?),
-            0x9a => IfIntNe0(bytes.read_code_index()?),
-            0x9b => IfIntLt0(bytes.read_code_index()?),
-            0x9c => IfIntGe0(bytes.read_code_index()?),
-            0x9d => IfIntGt0(bytes.read_code_index()?),
-            0x9e => IfIntLe0(bytes.read_code_index()?),
+            code::OPCODE_SUB_INT => SubInt,
+            code::OPCODE_SUB_LONG => SubLong,
+            code::OPCODE_SUB_FLOAT => SubFloat,
+            code::OPCODE_SUB_DOUBLE => SubDouble,
 
-            0x9f => IfIntEq(bytes.read_code_index()?),
-            0xa0 => IfIntNe(bytes.read_code_index()?),
-            0xa1 => IfIntLt(bytes.read_code_index()?),
-            0xa2 => IfIntGe(bytes.read_code_index()?),
-            0xa3 => IfIntGt(bytes.read_code_index()?),
-            0xa4 => IfIntLe(bytes.read_code_index()?),
+            code::OPCODE_MUL_INT => MulInt,
+            code::OPCODE_MUL_LONG => MulLong,
+            code::OPCODE_MUL_FLOAT => MulFloat,
+            code::OPCODE_MUL_DOUBLE => MulDouble,
 
-            0xa5 => IfRefEq(bytes.read_code_index()?),
-            0xa6 => IfRefNe(bytes.read_code_index()?),
+            code::OPCODE_DIV_INT => DivInt,
+            code::OPCODE_DIV_LONG => DivLong,
+            code::OPCODE_DIV_FLOAT => DivFloat,
+            code::OPCODE_DIV_DOUBLE => DivDouble,
 
-            0xa7 => Goto(bytes.read_code_index()?),
-            0xa8 => JumpSub(bytes.read_code_index()?),
-            0xa9 => RetSub(bytes.read_var_index()?),
+            code::OPCODE_REM_INT => RemInt,
+            code::OPCODE_REM_LONG => RemLong,
+            code::OPCODE_REM_FLOAT => RemFloat,
+            code::OPCODE_REM_DOUBLE => RemDouble,
 
-            0xaa => {
+            code::OPCODE_NEG_INT => NegInt,
+            code::OPCODE_NEG_LONG => NegLong,
+            code::OPCODE_NEG_FLOAT => NegFloat,
+            code::OPCODE_NEG_DOUBLE => NegDouble,
+
+            code::OPCODE_LEFT_SHIFT_INT => LeftShiftInt,
+            code::OPCODE_LEFT_SHIFT_LONG => LeftShiftLong,
+            code::OPCODE_RIGHT_SHIFT_INT => RightShiftInt,
+            code::OPCODE_RIGHT_SHIFT_LONG => RightShiftLong,
+            code::OPCODE_URIGHT_SHIFT_INT => URightShiftInt,
+            code::OPCODE_URIGHT_SHIFT_LONG => URightShiftLong,
+
+            code::OPCODE_AND_INT => AndInt,
+            code::OPCODE_AND_LONG => AndLong,
+
+            code::OPCODE_OR_INT => OrInt,
+            code::OPCODE_OR_LONG => OrLong,
+
+            code::OPCODE_XOR_INT => XorInt,
+            code::OPCODE_XOR_LONG => XorLong,
+
+            code::OPCODE_INC_INT => IncInt(bytes.read_var_index()?, bytes.read_i8()?),
+
+
+            code::OPCODE_INT_TO_LONG => IntToLong,
+            code::OPCODE_INT_TO_FLOAT => IntToFloat,
+            code::OPCODE_INT_TO_DOUBLE => IntToDouble,
+            code::OPCODE_LONG_TO_INT => LongToInt,
+            code::OPCODE_LONG_TO_FLOAT => LongToFloat,
+            code::OPCODE_LONG_TO_DOUBLE => LongToDouble,
+            code::OPCODE_FLOAT_TO_INT => FloatToInt,
+            code::OPCODE_FLOAT_TO_LONG => FloatToLong,
+            code::OPCODE_FLOAT_TO_DOUBLE => FloatToDouble,
+            code::OPCODE_DOUBLE_TO_INT => DoubleToInt,
+            code::OPCODE_DOUBLE_TO_LONG => DoubleToLong,
+            code::OPCODE_DOUBLE_TO_FLOAT => DoubleToFloat,
+
+            code::OPCODE_INT_TO_BYTE => IntToByte,
+            code::OPCODE_INT_TO_CHAR => IntToChar,
+            code::OPCODE_INT_TO_SHORT => IntToShort,
+
+
+            code::OPCODE_COMPARE_LONG => CompareLong,
+            code::OPCODE_COMPARE_FLOAT_L => CompareFloatL,
+            code::OPCODE_COMPARE_FLOAT_G => CompareFloatG,
+            code::OPCODE_COMPARE_DOUBLE_L => CompareDoubleL,
+            code::OPCODE_COMPARE_DOUBLE_G => CompareDoubleG,
+
+            code::OPCODE_IF_INT_EQ_0 => IfIntEq0(bytes.read_code_index()?),
+            code::OPCODE_IF_INT_NE_0 => IfIntNe0(bytes.read_code_index()?),
+            code::OPCODE_IF_INT_LT_0 => IfIntLt0(bytes.read_code_index()?),
+            code::OPCODE_IF_INT_GE_0 => IfIntGe0(bytes.read_code_index()?),
+            code::OPCODE_IF_INT_GT_0 => IfIntGt0(bytes.read_code_index()?),
+            code::OPCODE_IF_INT_LE_0 => IfIntLe0(bytes.read_code_index()?),
+
+            code::OPCODE_IF_INT_EQ => IfIntEq(bytes.read_code_index()?),
+            code::OPCODE_IF_INT_NE => IfIntNe(bytes.read_code_index()?),
+            code::OPCODE_IF_INT_LT => IfIntLt(bytes.read_code_index()?),
+            code::OPCODE_IF_INT_GE => IfIntGe(bytes.read_code_index()?),
+            code::OPCODE_IF_INT_GT => IfIntGt(bytes.read_code_index()?),
+            code::OPCODE_IF_INT_LE => IfIntLe(bytes.read_code_index()?),
+
+            code::OPCODE_IF_REF_EQ => IfRefEq(bytes.read_code_index()?),
+            code::OPCODE_IF_REF_NE => IfRefNe(bytes.read_code_index()?),
+
+            code::OPCODE_GOTO => Goto(bytes.read_code_index()?),
+            code::OPCODE_JUMP_SUB => JumpSub(bytes.read_code_index()?),
+            code::OPCODE_RET_SUB => RetSub(bytes.read_var_index()?),
+
+            code::OPCODE_TABLE_SWITCH => {
                 while bytes.count % 4 != 0 {
                     let _ = bytes.read_u8()?;
                 }
@@ -565,7 +567,7 @@ fn parse_code<R: Read>(bytes: &mut R, len: u32) -> Result<Vec<Instruction>> {
                     default_offset, match_range, offset_table,
                 }
             },
-            0xab => {
+            code::OPCODE_LOOKUP_SWITCH => {
                 while bytes.count % 4 != 0 {
                     let _ = bytes.read_u8()?;
                 }
@@ -580,30 +582,30 @@ fn parse_code<R: Read>(bytes: &mut R, len: u32) -> Result<Vec<Instruction>> {
                 }
             },
 
-            0xac => ReturnInt,
-            0xad => ReturnLong,
-            0xae => ReturnFloat,
-            0xaf => ReturnDouble,
-            0xb0 => ReturnRef,
-            0xb1 => ReturnVoid,
+            code::OPCODE_RETURN_INT => ReturnInt,
+            code::OPCODE_RETURN_LONG => ReturnLong,
+            code::OPCODE_RETURN_FLOAT => ReturnFloat,
+            code::OPCODE_RETURN_DOUBLE => ReturnDouble,
+            code::OPCODE_RETURN_REF => ReturnRef,
+            code::OPCODE_RETURN_VOID => ReturnVoid,
 
 
-            0xb2 => GetStaticField(bytes.read_constant_index()?),
-            0xb3 => PutStaticField(bytes.read_constant_index()?),
-            0xb4 => GetField(bytes.read_constant_index()?),
-            0xb5 => PutField(bytes.read_constant_index()?),
+            code::OPCODE_GET_STATIC_FIELD => GetStaticField(bytes.read_constant_index()?),
+            code::OPCODE_PUT_STATIC_FIELD => PutStaticField(bytes.read_constant_index()?),
+            code::OPCODE_GET_FIELD => GetField(bytes.read_constant_index()?),
+            code::OPCODE_PUT_FIELD => PutField(bytes.read_constant_index()?),
 
-            0xb6 => InvokeVirtual(bytes.read_constant_index()?),
-            0xb7 => InvokeSpecial(bytes.read_constant_index()?),
-            0xb8 => InvokeStatic(bytes.read_constant_index()?),
-            0xb9 => {
+            code::OPCODE_INVOKE_VIRTUAL => InvokeVirtual(bytes.read_constant_index()?),
+            code::OPCODE_INVOKE_SPECIAL => InvokeSpecial(bytes.read_constant_index()?),
+            code::OPCODE_INVOKE_STATIC=> InvokeStatic(bytes.read_constant_index()?),
+            code::OPCODE_INVOKE_INTERFACE => {
                 let index = bytes.read_constant_index()?;
                 let count = bytes.read_u8()?;
                 let _ = bytes.read_u8()?;
 
                 InvokeInterface(bytes.read_constant_index()?, count)
             },
-            0xba => {
+            code::OPCODE_INVOKE_DYNAMIC => {
                 let index = bytes.read_constant_index()?;
                 let _ = bytes.read_u8()?;
                 let _ = bytes.read_u8()?;
@@ -611,59 +613,59 @@ fn parse_code<R: Read>(bytes: &mut R, len: u32) -> Result<Vec<Instruction>> {
                 InvokeDynamic(bytes.read_constant_index()?)
             },
 
-            0xbb => New(bytes.read_constant_index()?),
-            0xbc => {
+            code::OPCODE_NEW => New(bytes.read_constant_index()?),
+            code::OPCODE_NEW_PRIMITIVE_ARRAY => {
                 let arr_type = bytes.read_u8()?;
                 NewPrimitiveArray(ArrayPrimitive::from_byte(arr_type)
                     .ok_or(invalid_data!("invalid primitive array type {} at instruction {}", arr_type, i))?)
             },
-            0xbd => NewRefArray(bytes.read_constant_index()?),
+            code::OPCODE_NEW_REF_ARRAY => NewRefArray(bytes.read_constant_index()?),
 
-            0xbe => ArrayLen,
+            code::OPCODE_ARRAY_LEN => ArrayLen,
 
-            0xbf => Throw,
+            code::OPCODE_THROW => Throw,
 
-            0xc0 => CheckCast(bytes.read_constant_index()?),
-            0xc1 => InstanceOf(bytes.read_constant_index()?),
+            code::OPCODE_CHECK_CAST => CheckCast(bytes.read_constant_index()?),
+            code::OPCODE_INSTANCE_OF => InstanceOf(bytes.read_constant_index()?),
 
-            0xc2 => EnterMonitor,
-            0xc3 => ExitMonitor,
+            code::OPCODE_ENTER_MONITOR => EnterMonitor,
+            code::OPCODE_EXIT_MONITOR => ExitMonitor,
 
 
-            0xc4 => {
+            code::OPCODE_WIDE => {
                 use super::WideInstruction as W;
                 let wide_instruction = match bytes.read_u8()? {
-                    0x15 => W::LoadInt(bytes.read_wide_var_index()?),
-                    0x16 => W::LoadLong(bytes.read_wide_var_index()?),
-                    0x17 => W::LoadFloat(bytes.read_wide_var_index()?),
-                    0x18 => W::LoadDouble(bytes.read_wide_var_index()?),
-                    0x19 => W::LoadRef(bytes.read_wide_var_index()?),
+                    code::OPCODE_LOAD_INT => W::LoadInt(bytes.read_wide_var_index()?),
+                    code::OPCODE_LOAD_LONG => W::LoadLong(bytes.read_wide_var_index()?),
+                    code::OPCODE_LOAD_FLOAT => W::LoadFloat(bytes.read_wide_var_index()?),
+                    code::OPCODE_LOAD_DOUBLE => W::LoadDouble(bytes.read_wide_var_index()?),
+                    code::OPCODE_LOAD_REF => W::LoadRef(bytes.read_wide_var_index()?),
 
-                    0x36 => W::StoreInt(bytes.read_wide_var_index()?),
-                    0x37 => W::StoreLong(bytes.read_wide_var_index()?),
-                    0x38 => W::StoreFloat(bytes.read_wide_var_index()?),
-                    0x39 => W::StoreDouble(bytes.read_wide_var_index()?),
-                    0x3a => W::StoreRef(bytes.read_wide_var_index()?),
+                    code::OPCODE_STORE_INT => W::StoreInt(bytes.read_wide_var_index()?),
+                    code::OPCODE_STORE_LONG => W::StoreLong(bytes.read_wide_var_index()?),
+                    code::OPCODE_STORE_FLOAT => W::StoreFloat(bytes.read_wide_var_index()?),
+                    code::OPCODE_STORE_DOUBLE => W::StoreDouble(bytes.read_wide_var_index()?),
+                    code::OPCODE_STORE_REF => W::StoreRef(bytes.read_wide_var_index()?),
 
-                    0x84 => W::IncInt(bytes.read_wide_var_index()?, bytes.read_i16::<BigEndian>()?),
+                    code::OPCODE_INC_INT => W::IncInt(bytes.read_wide_var_index()?, bytes.read_i16::<BigEndian>()?),
 
-                    0xa9 => W::RetSub(bytes.read_wide_var_index()?),
+                    code::OPCODE_RET_SUB => W::RetSub(bytes.read_wide_var_index()?),
 
                     invalid => Err(invalid_data!("invalid wide opcode {} at instruction {}", invalid, i))?,
                 };
                 Wide(wide_instruction)
             },
 
-            0xc5 => NewRefMultiArray(bytes.read_constant_index()?, bytes.read_u8()?),
-            0xc6 => IfRefNull(bytes.read_code_index()?),
-            0xc7 => IfRefNonNull(bytes.read_code_index()?),
-            0xc8 => WideGoto(bytes.read_wide_code_index()?),
-            0xc9 => WideJumpSub(bytes.read_wide_code_index()?),
+            code::OPCODE_NEW_REF_MULTI_ARRAY => NewRefMultiArray(bytes.read_constant_index()?, bytes.read_u8()?),
+            code::OPCODE_IF_REF_NULL => IfRefNull(bytes.read_code_index()?),
+            code::OPCODE_IF_REF_NON_NULL => IfRefNonNull(bytes.read_code_index()?),
+            code::OPCODE_WIDE_GOTO => WideGoto(bytes.read_wide_code_index()?),
+            code::OPCODE_WIDE_JUMP_SUB => WideJumpSub(bytes.read_wide_code_index()?),
 
 
-            0xca => Breakpoint,
-            0xfe => ImplementationDefined1,
-            0xff => ImplementationDefined2,
+            code::OPCODE_BREAKPOINT => Breakpoint,
+            code::OPCODE_IMPLEMENTATION_DEFINED_1 => ImplementationDefined1,
+            code::OPCODE_IMPLEMENTATION_DEFINED_2 => ImplementationDefined2,
 
             invalid => Err(invalid_data!("invalid opcode {} at instruction {}", invalid, i))?,
         };
@@ -675,7 +677,7 @@ fn parse_code<R: Read>(bytes: &mut R, len: u32) -> Result<Vec<Instruction>> {
 }
 
 pub fn emit_class<W: Write>(class: &Class, out: &mut W) -> Result<()> {
-    out.write_u32::<BigEndian>(consts::MAGIC)?;
+    out.write_u32::<BigEndian>(consts::class::MAGIC)?;
 
     out.write_u16::<BigEndian>(class.minor_version)?;
     out.write_u16::<BigEndian>(class.major_version)?;
@@ -864,6 +866,7 @@ fn emit_attribute<W: Write>(attribute: &Attribute, out: &mut W) -> Result<()> {
 
         AttributeInfo::Other(ref buf) => out.write_all(&buf[..])?,
 
+        // FIXME: emit the rest of the attributes
         _ => unimplemented!(),
     }
 
@@ -994,26 +997,25 @@ fn emit_code<W: Write>(instructions: &Vec<Instruction>, out: &mut W) -> Result<(
 
             Wide(ref wide_instruction) => {
                 out.write_u8(wide_instruction.opcode())?;
-                use super::WideInstruction as W;
                 match *wide_instruction {
-                    W::LoadInt(ref index) => out.write_wide_var_index(index)?,
-                    W::LoadLong(ref index) => out.write_wide_var_index(index)?,
-                    W::LoadFloat(ref index) => out.write_wide_var_index(index)?,
-                    W::LoadDouble(ref index) => out.write_wide_var_index(index)?,
-                    W::LoadRef(ref index) => out.write_wide_var_index(index)?,
+                    WideInstruction::LoadInt(ref index) => out.write_wide_var_index(index)?,
+                    WideInstruction::LoadLong(ref index) => out.write_wide_var_index(index)?,
+                    WideInstruction::LoadFloat(ref index) => out.write_wide_var_index(index)?,
+                    WideInstruction::LoadDouble(ref index) => out.write_wide_var_index(index)?,
+                    WideInstruction::LoadRef(ref index) => out.write_wide_var_index(index)?,
 
-                    W::StoreInt(ref index) => out.write_wide_var_index(index)?,
-                    W::StoreLong(ref index) => out.write_wide_var_index(index)?,
-                    W::StoreFloat(ref index) => out.write_wide_var_index(index)?,
-                    W::StoreDouble(ref index) => out.write_wide_var_index(index)?,
-                    W::StoreRef(ref index) => out.write_wide_var_index(index)?,
+                    WideInstruction::StoreInt(ref index) => out.write_wide_var_index(index)?,
+                    WideInstruction::StoreLong(ref index) => out.write_wide_var_index(index)?,
+                    WideInstruction::StoreFloat(ref index) => out.write_wide_var_index(index)?,
+                    WideInstruction::StoreDouble(ref index) => out.write_wide_var_index(index)?,
+                    WideInstruction::StoreRef(ref index) => out.write_wide_var_index(index)?,
 
-                    W::IncInt(ref index, short) => {
+                    WideInstruction::IncInt(ref index, short) => {
                         out.write_wide_var_index(index)?;
                         out.write_i16::<BigEndian>(short)?;
                     }
 
-                    W::RetSub(ref index) => out.write_wide_var_index(index)?,
+                    WideInstruction::RetSub(ref index) => out.write_wide_var_index(index)?,
 
                 };
             },

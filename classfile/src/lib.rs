@@ -1,7 +1,7 @@
 extern crate byteorder;
 
 pub mod consts;
-pub mod file;
+pub mod raw;
 pub mod indexing;
 
 #[derive(Clone)]
