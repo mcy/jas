@@ -1,0 +1,58 @@
+AssemblyUnit:
+    Instruction*
+
+Instruction:
+    Ident ':' Ident (Expr ',')* (Expr ','?)? '\n'
+
+Expr:
+    Ident | Literal | Bracket
+
+Bracket:
+    '[' Instruction ']'
+
+Ident:
+    Alphabetic (Alphabetic | DecDigit)*
+
+Alphabetic:
+    'a' .. 'z' | 'A' .. 'Z' | '_' | '<' | '>' | '$'
+
+Literal:
+    String | Char | Number
+
+String:
+    '"' <what you expect> '"'
+
+Char:
+    "'" <what you expect> "'"
+
+Number:
+    FloatNumber | DecNumber | BinNumber | OctNumber | HexNumber
+
+FloatNumber:
+    DecNumber '.' ( DecNumber (('E' | 'e') DecNumber)?)? |
+    '.' DecNumber (('E' | 'e') DecNumber)?
+
+DecNumber:
+    DecDigit (DecDigit | '_')*
+
+DecDigit:
+    '0' .. '9'
+
+BinNumber:
+    ('0b' | '0B') BinDigit (BinDigit | '_')*
+
+BinDigit:
+    '0' | '1'
+
+OctNumber:
+    ('0x' | '0O') OctDigit (OctDigit | '_')*
+
+OctDigit:
+    '0' .. '7'
+
+HexNumber:
+    ('0x' | '0X') HexNumber (HexNumber | '_')*
+
+HexNumber:
+    '0' .. '9' | 'a' .. 'f' | 'A' .. 'F'
+
