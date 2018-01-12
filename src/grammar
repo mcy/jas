@@ -5,7 +5,17 @@ Instruction:
     Ident ':' Ident (Expr ',')* (Expr ','?)? '\n'
 
 Expr:
-    Ident | Literal | Bracket
+    Ident | Literal | Bracket | '(' Expr ')'
+
+Operation:
+    Expr '+' Expr |
+    Expr '-' Expr |
+    Expr '*' Expr |
+    Expr '/' Expr |
+    Expr '%' Expr |
+    Expr '&' Expr |
+    Expr '|' Expr |
+    Expr '^' Expr
 
 Bracket:
     '[' Instruction ']'

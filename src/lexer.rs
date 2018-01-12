@@ -1,59 +1,17 @@
-use std::io::prelude::*;
-use std::io::*;
 use std::mem;
 use std::result;
 use std::vec;
 
-#[derive(Clone, Copy, Debug)]
-pub struct Position {
-    pub line: usize,
-    pub column: usize,
-}
-
-impl Position {
-
-    pub fn new(line: usize, column: usize) -> Position {
-        Position { line, column, }
-    }
-
-    pub fn advance_col(&self) -> Position {
-        Position::new(self.line, self.column + 1)
-    }
-
-    pub fn advance_line(&self) -> Position {
-        Position::new(self.line + 1, 0)
-    }
-
-    pub fn advance_col_mut(&mut self) {
-        *self = self.advance_col();
-    }
-
-    pub fn advance_line_mut(&mut self) {
-        *self = self.advance_line();
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct Span {
-    pub start: Position,
-    pub end: Position,
-}
-
-impl Span {
-
-    pub fn new(start: Position, end: Position) -> Span {
-        Span { start, end, }
-    }
-}
+use reporting::{Position, Span};
 
 #[derive(Clone, Debug)]
 pub struct Token {
-    value: String,
-    span: Span,
-    ty: TokenType
+    pub value: String,
+    pub span: Span,
+    pub ty: TokenType,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TokenType {
     AlphaNum,
     LineBreak,
@@ -164,7 +122,7 @@ impl Lexer {
             LS::None => {
                 match next {
                     'a' ... 'z' | '$' | '_' | '<' | '>' |
-                    'A' ... 'Z' | '0' ... '9' => {
+                    'A' ... 'Z' | '0' ... '9' | '.' => {
                         self.new_token(next, LS::AlphaNum);
                     },
                     '"' => {
@@ -188,7 +146,7 @@ impl Lexer {
             LS::AlphaNum => {
                 match next {
                     'a' ... 'z' | '$' | '_' | '<' | '>' |
-                    'A' ... 'Z' | '0' ... '9' => {
+                    'A' ... 'Z' | '0' ... '9' | '.' => {
                         self.push_char(next);
                     },
                     '"' => {
@@ -219,7 +177,7 @@ impl Lexer {
             LS::LineBreak => {
                 match next {
                     'a' ... 'z' | '$' | '_' | '<' | '>' |
-                    'A' ... 'Z' | '0' ... '9' => {
+                    'A' ... 'Z' | '0' ... '9' | '.' => {
                         self.end_token(TT::LineBreak);
                         self.new_token(next, LS::AlphaNum);
                     },
@@ -273,7 +231,7 @@ impl Lexer {
             LS::StrEnd => {
                 match next {
                     'a' ... 'z' | '$' | '_' | '<' | '>' |
-                    'A' ... 'Z' | '0' ... '9' => {
+                    'A' ... 'Z' | '0' ... '9' | '.' => {
                         self.end_token(TT::Str);
                         self.new_token(next, LS::AlphaNum);
                     },
@@ -331,7 +289,7 @@ impl Lexer {
             LS::CharEnd => {
                 match next {
                     'a' ... 'z' | '$' | '_' | '<' | '>' |
-                    'A' ... 'Z' | '0' ... '9' => {
+                    'A' ... 'Z' | '0' ... '9' | '.' => {
                         self.end_token(TT::Char);
                         self.new_token(next, LS::AlphaNum);
                     },
@@ -371,7 +329,7 @@ impl Lexer {
             LS::Punct => {
                 match next {
                     'a' ... 'z' | '$' | '_' | '<' | '>' |
-                    'A' ... 'Z' | '0' ... '9' => {
+                    'A' ... 'Z' | '0' ... '9' | '.' => {
                         self.end_token(TT::Punct);
                         self.new_token(next, LS::AlphaNum);
                     },
@@ -409,7 +367,7 @@ impl Lexer {
         }
 
         !self.token_queue.is_empty()
-    }cle
+    }
 }
 
 impl Iterator for Lexer {

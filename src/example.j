@@ -9,8 +9,8 @@
 
 System:     class_ref       "java/lang/System"                      ; declare a class ref constant
 
-out:        field_ref       System, "out", "Ljava/io/PrintStream";  ; reference another constant
-err:        field_ref       0x1, "out", "Ljava/io/PrintStream";     ; or be obnoxious and use a numeric pointer
+out:        field_ref       System, "out", "Ljava/io/PrintStream;"  ; reference another constant
+err:        field_ref       0x1, "out", "Ljava/io/PrintStream;"     ; or be obnoxious and use a numeric pointer
                                                                     ; constants will appear in the order they
                                                                     ; are declared
 println:    method_ref      "java/io/PrintStream", "println", "(Ljava/lang/String;)V"
@@ -31,7 +31,7 @@ foo:        field           "I"         ; the field instructon declates a new fi
             return
 
 main:       method          "([Ljava/lang/String;)V"
-            flags           public,static
+            flags           public, static
             getstatic       out
             lcm             [string "Hello, world!"] ; create a constant and return its address
             invokevirtual   println
