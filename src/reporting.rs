@@ -54,6 +54,12 @@ macro_rules! report_error {
     ($($args:tt)+) => { __report!($crate::reporting::ReportKind::Error, $($args)+) };
 }
 
+macro_rules! fatal_error {
+    ($reports:ident; $($args:tt)+) => {{
+        $reports.report(__report!($crate::reporting::ReportKind::Error, $($args)+));
+        return $reports;
+    }};
+}
 
 macro_rules! report_warning {
     ($($args:tt)+) => { __report!($crate::reporting::ReportKind::Warning, $($args)+) };
@@ -76,7 +82,7 @@ macro_rules! __report {
         }
     };
 
-    ($kind:expr, $message:expr; $($($locs:expr),+ $(,)*),*) => {
+    ($kind:expr, $message:expr; $($($locs:expr);+ $(;)*),*) => {
         $crate::reporting::Report {
             kind: $kind,
             message: $message.into(),
@@ -84,11 +90,11 @@ macro_rules! __report {
         }
     };
 
-    ($kind:expr, $message:expr, $($args:expr),* $(,)*; $($($locs:expr),+ $(,)*),*) => {
+    ($kind:expr, $message:expr, $($args:expr),* $(,)*; $($($locs:expr);* $(;)*),*) => {
         $crate::reporting::Report {
             kind: $kind,
             message: format!($message, $($args),*),
-            locations: vec![$(__span!($($locs),+)),*],
+            locations: vec![$(__span!($($locs),*)),*],
         }
     };
 }
@@ -115,4 +121,58 @@ pub struct Report {
 #[derive(Clone, Copy, Debug)]
 pub enum ReportKind {
     Error, Warning,
+}
+
+macro_rules! merge_reports {
+    ($current:expr, $returned:expr) => {
+        match $current.merge($returned) {
+            Some(x) => x,
+            None => return $current,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Reported<T> {
+    pub result: Option<T>,
+    pub reports: Vec<Report>,
+}
+
+impl<T> Reported<T> {
+
+    pub fn new() -> Reported<T> {
+        Reported {
+            result: None,
+            reports: Vec::new(),
+        }
+    }
+
+    pub fn report(&mut self, report: Report) {
+        self.reports.push(report);
+    }
+
+    pub fn complete(mut self, x: T) -> Reported<T> {
+        self.result = Some(x);
+        self
+    }
+
+    pub fn merge<S>(&mut self, other: Reported<S>) -> Option<S> {
+        let Reported {
+            result, mut reports,
+        } = other;
+        self.reports.append(&mut reports);
+        result
+    }
+
+    pub fn unwrap(self) -> T {
+        match self.result {
+            Some(x) => x,
+            None => {
+                for report in self.reports {
+                    eprintln!("{:?}", report);
+                }
+                panic!("aborted due to previous errors");
+            }
+        }
+    }
 }

@@ -5,5 +5,6 @@ authors = ["Miguel Young <mcyoung@mit.edu>"]
 
 [dependencies]
 classfile = { path = "classfile" }
+either = "1.4.0"
 
 [workspace]

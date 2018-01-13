@@ -376,7 +376,6 @@ impl Iterator for Lexer {
     fn next(&mut self) -> Option<Self::Item> {
         while !self.consume_char() {}
         let x = self.token_queue.pop();
-        println!("{:?}", x);
         x
     }
 }

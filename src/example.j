@@ -3,9 +3,9 @@
 ;
             class           "jas/example/Hello"
             super           "java/lang/Object"
-            implements      "jas/example/Foo"
+            impl            "jas/example/Foo"
             flags           public
-            version         51.0
+            version         "51, 0"
 
 System:     class_ref       "java/lang/System"                      ; declare a class ref constant
 
@@ -19,6 +19,7 @@ string:     string          "string"                                ; we can nam
             int             42                                      ; declare an anonymous constant
                                                                     ; we know to start a new constant since it's on
                                                                     ; a new line without a preceding label
+            field_ref       0x1, [name_and_type "in", "Ljava/io/InputStream;"]
 
 foo:        field           "I"         ; the field instructon declates a new field
             flags           public      ; the flags instruction applies flags to the
@@ -33,7 +34,7 @@ foo:        field           "I"         ; the field instructon declates a new fi
 main:       method          "([Ljava/lang/String;)V"
             flags           public, static
             getstatic       out
-            lcm             [string "Hello, world!"] ; create a constant and return its address
+            ldc             [string "Hello, world!"] ; create a constant and return its address
             invokevirtual   println
             return
 
@@ -42,7 +43,7 @@ inst_str:   string          "Hello, instance!"
 instance:   method          "()V"
             flags           public
             getstatic       out
-            lcm             instance_str
+            ldc             instance_str
             invokevirtual   println
             return
 
@@ -51,7 +52,7 @@ instance_by_num:
                                     ; found an instruction yet
             flags           public
             getstatic       out
-            lcm             0x4     ; point directly to a constant
+            ldc             0x4     ; point directly to a constant
             invokevirtual   println
             return
 
