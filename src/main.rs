@@ -18,16 +18,16 @@ use std::io::prelude::*;
 
 fn main() {
 
-    let lexer = lexer::Lexer::new(include_str!("hello.j").into());
+    let lexer = lexer::Lexer::new(include_str!("hello_compact.j").into());
 
     let tokens = lexer.collect::<Vec<_>>();
 
     let mut parser = ast::Parser::new(tokens);
 
-    let ast = parser.consume_all().unwrap();
+    let ast = parser.consume_all();
     println!("{:?}", ast);
 
-    let mut sections = trans::ClassSection::from_instructions(ast).unwrap();
+    let mut sections = trans::ClassSection::from_instructions(ast.unwrap()).unwrap();
 
     for (i, section) in sections.into_iter().enumerate() {
         let mut partial = trans::PartialClass::new();

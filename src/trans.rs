@@ -142,19 +142,19 @@ impl PartialClass {
         self.labels.insert("super".into(), LabelKind::Item);
 
         if let Some(ref label) = section.label {
-            if self.labels.contains_key(label.value()) {
-                reports.report(report_error!("duplicate label"; label.span()));
+            if self.labels.contains_key(&label.name) {
+                reports.report(report_error!("duplicate label"; label.span));
             } else {
-                self.labels.insert(label.value().clone(), LabelKind::Item);
+                self.labels.insert(label.name.clone(), LabelKind::Item);
             }
         }
 
         for meta in section.top_level.iter() {
             if let Some(ref label) = meta.label {
-                if self.labels.contains_key(label.value()) {
-                    reports.report(report_error!("duplicate label"; label.span()));
+                if self.labels.contains_key(&label.name) {
+                    reports.report(report_error!("duplicate label"; label.span));
                 } else {
-                    self.labels.insert(label.value().clone(), LabelKind::Meta);
+                    self.labels.insert(label.name.clone(), LabelKind::Meta);
                 }
             }
         }
@@ -162,33 +162,33 @@ impl PartialClass {
         let mut index = 0;
         for constant in section.constants.iter() {
             if let Some(ref label) = constant.label {
-                if self.labels.contains_key(label.value()) {
-                    reports.report(report_error!("duplicate label"; label.span()));
+                if self.labels.contains_key(&label.name) {
+                    reports.report(report_error!("duplicate label"; label.span));
                 } else {
-                    self.labels.insert(label.value().clone(), LabelKind::Constant(index + 1));
+                    self.labels.insert(label.name.clone(), LabelKind::Constant(index + 1));
                 }
-                index += match constant.body {
-                    ConstantInstruction::Long(..) |
-                    ConstantInstruction::Double(..) => 2,
-                    _ => 1,
-                }
+            }
+            index += match constant.body {
+                ConstantInstruction::Long(..) |
+                ConstantInstruction::Double(..) => 2,
+                _ => 1,
             }
         }
 
         for field in section.fields.iter() {
             if let Some(ref label) = field.label {
-                if self.labels.contains_key(label.value()) {
-                    reports.report(report_error!("duplicate label"; label.span()));
+                if self.labels.contains_key(&label.name) {
+                    reports.report(report_error!("duplicate label"; label.span));
                 } else {
-                    self.labels.insert(label.value().clone(), LabelKind::Item);
+                    self.labels.insert(label.name.clone(), LabelKind::Item);
                 }
             }
             for meta in field.meta.iter() {
                 if let Some(ref label) = meta.label {
-                    if self.labels.contains_key(label.value()) {
-                        reports.report(report_error!("duplicate label"; label.span()));
+                    if self.labels.contains_key(&label.name) {
+                        reports.report(report_error!("duplicate label"; label.span));
                     } else {
-                        self.labels.insert(label.value().clone(), LabelKind::Meta);
+                        self.labels.insert(label.name.clone(), LabelKind::Meta);
                     }
                 }
             }
@@ -196,27 +196,27 @@ impl PartialClass {
 
         for method in section.methods.iter() {
             if let Some(ref label) = method.label {
-                if self.labels.contains_key(label.value()) {
-                    reports.report(report_error!("duplicate label"; label.span()));
+                if self.labels.contains_key(&label.name) {
+                    reports.report(report_error!("duplicate label"; label.span));
                 } else {
-                    self.labels.insert(label.value().clone(), LabelKind::Item);
+                    self.labels.insert(label.name.clone(), LabelKind::Item);
                 }
             }
             for meta in method.meta.iter() {
                 if let Some(ref label) = meta.label {
-                    if self.labels.contains_key(label.value()) {
-                        reports.report(report_error!("duplicate label"; label.span()));
+                    if self.labels.contains_key(&label.name) {
+                        reports.report(report_error!("duplicate label"; label.span));
                     } else {
-                        self.labels.insert(label.value().clone(), LabelKind::Meta);
+                        self.labels.insert(label.name.clone(), LabelKind::Meta);
                     }
                 }
             }
             for code in method.code.iter() {
                 if let Some(ref label) = code.label {
-                    if self.labels.contains_key(label.value()) {
-                        reports.report(report_error!("duplicate label"; label.span()));
+                    if self.labels.contains_key(&label.name) {
+                        reports.report(report_error!("duplicate label"; label.span));
                     } else {
-                        self.labels.insert(label.value().clone(), LabelKind::Code(0)); // FIXME
+                        self.labels.insert(label.name.clone(), LabelKind::Code(0)); // FIXME
                     }
                 }
             }
@@ -392,7 +392,7 @@ impl PartialClass {
             }
             ConstantInstruction::MethodHandle { kind, referent } => {
                 let kind = match kind {
-                    Expr::Ref(ident) => match ident.value().as_str() {
+                    Expr::Ref(ident) => match ident.name.as_str() {
                         special::HANDLE_KIND_GET_FIELD => raw::MethodHandleKind::GetField,
                         special::HANDLE_KIND_GET_STATIC => raw::MethodHandleKind::GetStatic,
                         special::HANDLE_KIND_PUT_FIELD => raw::MethodHandleKind::PutStatic,
@@ -403,7 +403,7 @@ impl PartialClass {
                         special::HANDLE_KIND_INVOKE_SPECIAL => raw::MethodHandleKind::InvokeSpecial,
                         special::HANDLE_KIND_NEW_INVOKE_SPECIAL => raw::MethodHandleKind::NewInvokeSpecial,
                         special::HANDLE_KIND_INVOKE_INTERFACE => raw::MethodHandleKind::InvokeInterface,
-                        other => fatal_error!(reports; "`{}` is not a method handle kind", other; ident.span())
+                        other => fatal_error!(reports; "`{}` is not a method handle kind", other; ident.span)
                     }
                     other => fatal_error!(reports; "expected ident"; other.span())
                 };
@@ -456,7 +456,7 @@ impl PartialClass {
                         let mut flag = flags::class::Flags::new();
                         for expr in exprs {
                             match expr {
-                                Expr::Ref(ident) => match ident.value().as_str() {
+                                Expr::Ref(ident) => match ident.name.as_str() {
                                     consts::flags::PUBLIC => flag.set_public(true),
                                     consts::flags::FINAL => flag.set_final(true),
                                     consts::flags::SUPER => flag.set_super(true),
@@ -466,7 +466,7 @@ impl PartialClass {
                                     consts::flags::ANNOTATION => flag.set_annotation(true),
                                     consts::flags::ENUM => flag.set_enum(true),
                                     other => {
-                                        reports.report(report_error!("`{}` is not a class flag", other; ident.span()));
+                                        reports.report(report_error!("`{}` is not a class flag", other; ident.span));
                                         &mut flag // FIXME: this is to make this typecheck
                                     },
                                 },
@@ -496,8 +496,8 @@ impl PartialClass {
                     let name_index = merge_reports!(reports, self.eval_expr_into_index(name, Some(PartialClass::push_string_constant)));
                     match data {
                         Expr::Str(str) => {
-                            let span = str.span();
-                            if let Ok(data) = base64::decode(str.value().as_str()) { // FIXME: clone
+                            let span = str.span;
+                            if let Ok(data) = base64::decode(str.value.as_str()) { // FIXME: clone
                                 let attribute = raw::Attribute {
                                     name: name_index,
                                     info: raw::AttributeInfo::Other(data),
@@ -525,13 +525,13 @@ impl PartialClass {
                 if let Some(name) = field.name {
                     fatal_error!(reports; "`field` cannot have both a label and a second argument"; name.span())
                 } else {
-                    self.push_string_constant(label.value().clone()) // FIXME: get rid of clone
+                    self.push_string_constant(label.name.clone()) // FIXME: get rid of clone
                 }
             } else {
                 if let Some(name) = field.name {
                     merge_reports!(reports, self.eval_expr_into_index(name, Some(PartialClass::push_string_constant)))
                 } else {
-                    fatal_error!(reports; "`field` requires either a label or a second argument"; field.ident.span())
+                    fatal_error!(reports; "`field` requires either a label or a second argument"; field.ident.span)
                 }
             }
         };
@@ -557,7 +557,7 @@ impl PartialClass {
                         let mut flag = flags::field::Flags::new();
                         for expr in exprs {
                             match expr {
-                                Expr::Ref(ident) => match ident.value().as_str() {
+                                Expr::Ref(ident) => match ident.name.as_str() {
                                     consts::flags::PUBLIC => flag.set_public(true),
                                     consts::flags::PRIVATE => flag.set_private(true),
                                     consts::flags::PROTECTED => flag.set_protected(true),
@@ -568,7 +568,7 @@ impl PartialClass {
                                     consts::flags::SYNTHETIC => flag.set_synthetic(true),
                                     consts::flags::ENUM => flag.set_enum(true),
                                     other => {
-                                        reports.report(report_error!("`{}` is not a field flag", other; ident.span()));
+                                        reports.report(report_error!("`{}` is not a field flag", other; ident.span));
                                         &mut flag // FIXME: this is to make this typecheck
                                     },
                                 },
@@ -600,8 +600,8 @@ impl PartialClass {
                     let name_index = merge_reports!(reports, self.eval_expr_into_index(name, Some(PartialClass::push_string_constant)));
                     match data {
                         Expr::Str(str) => {
-                            let span = str.span();
-                            if let Ok(data) = base64::decode(str.value().as_str()) { // FIXME: clone
+                            let span = str.span;
+                            if let Ok(data) = base64::decode(str.value.as_str()) { // FIXME: clone
                                 let attribute = raw::Attribute {
                                     name: name_index,
                                     info: raw::AttributeInfo::Other(data),
@@ -637,13 +637,13 @@ impl PartialClass {
                 if let Some(name) = method.name {
                     fatal_error!(reports; "`method` cannot have both a label and a second argument"; name.span())
                 } else {
-                    self.push_string_constant(label.value().clone()) // FIXME: get rid of clone
+                    self.push_string_constant(label.name.clone()) // FIXME: get rid of clone
                 }
             } else {
                 if let Some(name) = method.name {
                     merge_reports!(reports, self.eval_expr_into_index(name, Some(PartialClass::push_string_constant)))
                 } else {
-                    fatal_error!(reports; "`method` requires either a label or a second argument"; method.ident.span())
+                    fatal_error!(reports; "`method` requires either a label or a second argument"; method.ident.span)
                 }
             }
         };
@@ -673,7 +673,7 @@ impl PartialClass {
                         let mut flag = flags::method::Flags::new();
                         for expr in exprs {
                             match expr {
-                                Expr::Ref(ident) => match ident.value().as_str() {
+                                Expr::Ref(ident) => match ident.name.as_str() {
                                     consts::flags::PUBLIC => flag.set_public(true),
                                     consts::flags::PRIVATE => flag.set_private(true),
                                     consts::flags::PROTECTED => flag.set_protected(true),
@@ -687,7 +687,7 @@ impl PartialClass {
                                     consts::flags::STRICT => flag.set_strict(true),
                                     consts::flags::SYNTHETIC => flag.set_synthetic(true),
                                     other => {
-                                        reports.report(report_error!("`{}` is not a method flag", other; ident.span()));
+                                        reports.report(report_error!("`{}` is not a method flag", other; ident.span));
                                         &mut flag // FIXME: this is to make this typecheck
                                     },
                                 },
@@ -743,8 +743,8 @@ impl PartialClass {
                     let name_index = merge_reports!(reports, self.eval_expr_into_index(name, Some(PartialClass::push_string_constant)));
                     match data {
                         Expr::Str(str) => {
-                            let span = str.span();
-                            if let Ok(data) = base64::decode(str.value().as_str()) { // FIXME: clone
+                            let span = str.span;
+                            if let Ok(data) = base64::decode(str.value.as_str()) { // FIXME: clone
                                 let attribute = raw::Attribute {
                                     name: name_index,
                                     info: raw::AttributeInfo::Other(data),
@@ -1121,7 +1121,7 @@ impl PartialClass {
                     CodeInstruction::NewPrimitiveArray(expr) => {
                         let ty = match expr {
                             Expr::Ref(ident) => {
-                                match ident.value().as_str() {
+                                match ident.name.as_str() {
                                     special::ARR_BOOLEAN => raw::ArrayPrimitive::Boolean,
                                     special::ARR_CHAR => raw::ArrayPrimitive::Char,
                                     special::ARR_FLOAT => raw::ArrayPrimitive::Float,
@@ -1131,7 +1131,7 @@ impl PartialClass {
                                     special::ARR_INT => raw::ArrayPrimitive::Int,
                                     special::ARR_LONG => raw::ArrayPrimitive::Long,
                                     other => {
-                                        reports.report(report_error!("expected primitive type, found `{}`", other; ident.span()));
+                                        reports.report(report_error!("expected primitive type, found `{}`", other; ident.span));
                                         continue
                                     }
                                 }
@@ -1207,22 +1207,22 @@ impl PartialClass {
 
         let val = match expr {
             Expr::Ref(ident) => {
-                if let Some(index) = self.labels.get(ident.value()) {
+                if let Some(index) = self.labels.get(&ident.name) {
                     match *index {
-                        LabelKind::Constant(index) => Value::Int(index as i64, ident.span()),
-                        LabelKind::Item => fatal_error!(reports; "label points to item instruction; expected constant"; ident.span()),
-                        LabelKind::Meta => fatal_error!(reports; "label points to meta instruction; expected constant"; ident.span()),
-                        LabelKind::Code(index) => Value::Int(index as i64, ident.span()),
+                        LabelKind::Constant(index) => Value::Int(index as i64, ident.span),
+                        LabelKind::Item => fatal_error!(reports; "label points to item instruction; expected constant"; ident.span),
+                        LabelKind::Meta => fatal_error!(reports; "label points to meta instruction; expected constant"; ident.span),
+                        LabelKind::Code(index) => Value::Int(index as i64, ident.span),
                     }
 
                 } else {
-                    fatal_error!(reports; "could not find label `{}`", ident.value(); ident.span())
+                    fatal_error!(reports; "could not find label `{}`", ident.name; ident.span)
                 }
             },
-            Expr::Int(int) => Value::Int(int.value(), int.span()),
-            Expr::Float(float) => Value::Float(float.value(), float.span()),
-            Expr::Str(str) => Value::Str(str.value().clone() /* ugh */, str.span()),
-            Expr::Char(char) => Value::Int(char.value() as i64, char.span()),
+            Expr::Int(int) => Value::Int(int.value, int.span),
+            Expr::Float(float) => Value::Float(float.value, float.span),
+            Expr::Str(str) => Value::Str(str.value.clone() /* ugh */, str.span),
+            Expr::Char(char) => Value::Int(char.value as i64, char.span),
             Expr::Bracket(instruction) => {
                 let Instruction { label, ident, body, span } = { *instruction };
                 if let InstructionBody::Constant(i) = body {
@@ -1379,7 +1379,7 @@ impl ClassSection {
             if let InstructionBody::Item(ItemInstruction::Class { this_class, super_class }) = body {
                 break (label, ident, span, this_class, super_class);
             } else {
-                reports.report(report_error!("found `{}` before `class` instruction", ident.value(); ident.span()));
+                reports.report(report_error!("found `{}` before `class` instruction", ident.name; ident.span));
             }
         };
 
@@ -1405,7 +1405,7 @@ impl ClassSection {
                                 InstructionBody::Meta(i) => meta.push(MetaSection { label, ident, span, body: i }),
                                 InstructionBody::Constant(i) => constants.push(ConstantSection { label, ident, span, body: i }),
                                 InstructionBody::Code(..) => reports.report(report_error!(
-                                    "unexpected code instruction `{}` in field", ident.value(); ident.span()
+                                    "unexpected code instruction `{}` in field", ident.name; ident.span
                                 ))
                             }
                         }
@@ -1444,7 +1444,7 @@ impl ClassSection {
                 InstructionBody::Meta(i) => top_level.push(MetaSection { label, ident, span, body: i }),
                 InstructionBody::Constant(i) => constants.push(ConstantSection { label, ident, span, body: i }),
                 InstructionBody::Code(..) => reports.report(report_error!(
-                    "unexpected code instruction `{}`", ident.value(); ident.span()
+                    "unexpected code instruction `{}`", ident.name; ident.span
                 ))
             }
         }

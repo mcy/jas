@@ -87,6 +87,8 @@ impl Lexer {
         self.state = LexerState::Comment;
     }
 
+    // this returns true if the token stack
+    // has contents for popping
     fn consume_char(&mut self) -> bool {
         use self::TokenType as TT;
         use self::LexerState as LS;
@@ -375,7 +377,6 @@ impl Iterator for Lexer {
 
     fn next(&mut self) -> Option<Self::Item> {
         while !self.consume_char() {}
-        let x = self.token_queue.pop();
-        x
+        self.token_queue.pop()
     }
 }

@@ -1,5 +1,5 @@
             class           "Hello", "java/lang/Object",
-            flags           public, super, final
+            flags           public, super, final, synthetic
             version         0, 51,
 
 <init>:     method          "()V"

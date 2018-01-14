@@ -1,7 +1,6 @@
-use lexer::{Token, TokenType as TT};
-use reporting::*;
 
-use std::mem;
+use ast::*;
+use reporting::*;
 
 #[derive(Clone, Debug)]
 pub struct Instruction {
@@ -15,7 +14,7 @@ impl Instruction {
 
     pub fn from_source(line: SourceLine) -> Reported<Instruction> {
         use consts::instructions as inst;
-        
+
         use self::ItemInstruction as ItemI;
         use self::MetaInstruction as MetaI;
         use self::ConstantInstruction as ConstantI;
@@ -26,18 +25,18 @@ impl Instruction {
 
         #[inline]
         fn expected_args(reports: &mut Reported<Instruction>, line: &SourceLine, min: usize, max: usize) -> bool{
-            let len = line.args().len();
+            let len = line.args.len();
             if len < min {
                 reports.report(report_error!(
-                "not enough arguments for instruction `{}`, expected {}", line.instruction().value(), min;
-                line.instruction().span()
+                "not enough arguments for instruction `{}`, expected {}", line.instruction.name, min;
+                line.instruction.span
             ));
                 false
             } else if len > max {
                 for i in max..len {
                     reports.report(report_error!(
-                    "unexpected argument for instruction `{}`", line.instruction().value();
-                    line.args()[i].span()
+                    "unexpected argument for instruction `{}`", line.instruction.name;
+                    line.args[i].span()
                 ));
                 }
                 false
@@ -48,11 +47,11 @@ impl Instruction {
 
         #[inline]
         fn min_args(reports: &mut Reported<Instruction>, line: &SourceLine, n: usize) -> bool{
-            let len = line.args().len();
+            let len = line.args.len();
             if len < n {
                 reports.report(report_error!(
-                    "not enough arguments for instruction `{}`, expected {}", line.instruction().value(), n;
-                    line.instruction().span()
+                    "not enough arguments for instruction `{}`, expected {}", line.instruction.name, n;
+                    line.instruction.span
                 ));
                 false
             } else  {
@@ -70,7 +69,7 @@ impl Instruction {
             ($name:path, $ty:ident, $min:expr, $max:expr; $($field:expr),*; $($opt:expr),*) => {
                 if expected_args(&mut reports, &line, $min, $max) {
                     let op = {
-                        let mut iter = line.args().iter();
+                        let mut iter = line.args.iter();
                         $name (
                             $({$field; iter.next().unwrap().clone()}),*,
                             $({$opt; iter.next().cloned()}),*
@@ -96,7 +95,7 @@ impl Instruction {
             ($name:path, $ty:ident, $min:expr, $max:expr; $($field:ident),*; $($opt:ident),*) => {
                 if expected_args(&mut reports, &line, $min, $max) {
                     let op = {
-                        let mut iter = line.args().iter();
+                        let mut iter = line.args.iter();
                         $name {
                             $($field: iter.next().unwrap().clone(),)*
                             $($opt: iter.next().cloned(),)*
@@ -140,14 +139,14 @@ impl Instruction {
             ($name:path, $ty:ident) => (op_tuple!($name, $ty, 2, 2; 0, 1));
         }
 
-        match line.instruction().value().clone().as_str() {
+        match line.instruction.name.clone().as_str() {
             inst::CLASS => op_struct!(ItemI::Class, Item, 2, 2; this_class, super_class),
             inst::FIELD => op_struct!(ItemI::Field, Item, 1, 2; descriptor; name),
             inst::METHOD => op_struct!(ItemI::Method, Item, 1, 2; descriptor; name),
 
             inst::IMPL => {
                 if min_args(&mut reports, &line, 1) {
-                    let op = MetaI::Impl(line.args().clone());
+                    let op = MetaI::Impl(line.args.clone());
                     let SourceLine {
                         label, instruction, args, span,
                     } = line;
@@ -163,7 +162,7 @@ impl Instruction {
 
             inst::FLAGS => {
                 if min_args(&mut reports, &line, 1) {
-                    let op = MetaI::Flags(line.args().clone());
+                    let op = MetaI::Flags(line.args.clone());
                     let SourceLine {
                         label, instruction, args, span,
                     } = line;
@@ -416,7 +415,7 @@ impl Instruction {
             inst::TABLE_SWITCH => {
                 if min_args(&mut reports, &line, 3) {
                     let op = {
-                        let mut iter = line.args().iter();
+                        let mut iter = line.args.iter();
                         let default_offset = iter.next().unwrap().clone();
                         let match_start = iter.next().unwrap().clone();
                         let match_end = iter.next().unwrap().clone();
@@ -444,7 +443,7 @@ impl Instruction {
             inst::LOOKUP_SWITCH => {
                 if min_args(&mut reports, &line, 1) {
                     let op = {
-                        let mut iter = line.args().iter();
+                        let mut iter = line.args.iter();
                         let default_offset = iter.next().unwrap().clone();
                         let mut match_table = Vec::new();
                         loop {
@@ -940,7 +939,7 @@ pub enum CodeInstruction {
 }
 
 impl CodeInstruction {
-    
+
     #[inline]
     pub fn len(&self, prev: usize) -> usize {
         use self::CodeInstruction::*;
@@ -1043,543 +1042,6 @@ impl CodeInstruction {
             WideJumpSub(..) => 5,
 
             _ => 1
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct SourceLine {
-    label: Option<Ident>,
-    instruction: Ident,
-    args: Vec<Expr>,
-    span: Span,
-}
-
-impl SourceLine {
-
-    pub fn label(&self) -> &Option<Ident> {
-        &self.label
-    }
-
-    pub fn instruction(&self) -> &Ident {
-        &self.instruction
-    }
-
-    pub fn args(&self) -> &Vec<Expr> {
-        &self.args
-    }
-
-    pub fn span(&self) -> Span {
-        self.span
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum Expr {
-    Ref(Ident),
-    Int(IntLit),
-    Float(FloatLit),
-    Str(StrLit),
-    Char(CharLit),
-    Bracket(Box<Instruction>),
-    BinOp(Box<Expr>, BinOpKind, Box<Expr>),
-    //UnOp(UnOpKind, Box<Expr>),
-}
-
-impl Expr {
-
-    pub fn span(&self) -> Span {
-        match *self {
-            Expr::Ref(ref ident) => ident.span(),
-            Expr::Int(ref int) => int.span(),
-            Expr::Float(ref float) => float.span(),
-            Expr::Str(ref str) => str.span(),
-            Expr::Char(ref char) => char.span(),
-            Expr::Bracket(ref line) => line.span(), // FIXME
-            Expr::BinOp(ref first, _, ref second) => first.span().extend_to(second.span().end),
-            //Expr::UnOp(_, ref expr) => expr.span(), // FIXME
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum BinOpKind {
-    Add, Sub, Mul, Div,
-    Rem, And, Or, Xor,
-}
-
-impl BinOpKind {
-
-    pub fn from_str(val: &str) -> Option<BinOpKind> {
-        use self::BinOpKind as K;
-        match val {
-            "+" => Some(K::Add),
-            "-" => Some(K::Sub),
-            "*" => Some(K::Mul),
-            "/" => Some(K::Div),
-            "%" => Some(K::Rem),
-            "&" => Some(K::And),
-            "|" => Some(K::Or),
-            "^" => Some(K::Xor),
-            _ => None,
-        }
-    }
-}
-
-use std::cmp::Ordering;
-impl PartialOrd for BinOpKind {
-    #[inline]
-    fn partial_cmp(&self, other: &BinOpKind) -> Option<Ordering> {
-        #[inline]
-        fn precedence(val: BinOpKind) -> i8 {
-            use self::BinOpKind as K;
-            match val {
-                K::And | K::Or | K::Xor => 0,
-                K::Add | K::Sub => 1,
-                K::Mul | K::Div | K::Rem => 2,
-            }
-        }
-
-        if self == other {
-            Some(Ordering::Equal)
-        } else {
-            match precedence(*self).cmp(&precedence(*other)) {
-                Ordering::Equal => None,
-                x => Some(x),
-            }
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum UnOpKind {
-    Plus, Neg, Not
-}
-
-#[derive(Clone, Debug)]
-pub struct Ident {
-    name: String,
-    span: Span,
-}
-
-impl Ident {
-
-    pub fn value(&self) -> &String {
-        &self.name
-    }
-
-    pub fn span(&self) -> Span {
-        self.span
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct IntLit {
-    value: i64,
-    span: Span,
-}
-
-impl IntLit {
-
-    pub fn value(&self) -> i64 {
-        self.value
-    }
-
-    pub fn span(&self) -> Span {
-        self.span
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct FloatLit {
-    value: f64,
-    span: Span,
-}
-
-impl FloatLit {
-
-    pub fn value(&self) -> f64 {
-        self.value
-    }
-
-    pub fn span(&self) -> Span {
-        self.span
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct StrLit {
-    value: String,
-    span: Span,
-}
-
-impl StrLit {
-
-    pub fn value(&self) -> &String {
-        &self.value
-    }
-
-    pub fn span(&self) -> Span {
-        self.span
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct CharLit {
-    value: u16, // java chars, utf16!
-    span: Span,
-}
-
-impl CharLit {
-
-    pub fn value(&self) -> u16 {
-        self.value
-    }
-
-    pub fn span(&self) -> Span {
-        self.span
-    }
-}
-
-pub struct Parser {
-    token_stack: Vec<Token>,
-}
-
-impl Parser {
-
-    pub fn new(tokens: Vec<Token>) -> Parser {
-        Parser {
-            token_stack: tokens.into_iter().rev().collect(),
-        }
-    }
-
-    fn pop_token(&mut self, what: &str) -> Reported<Token> {
-
-        let mut reports = Reported::new();
-
-        if let Some(token) = self.token_stack.pop() {
-            reports.complete(token)
-        } else {
-            fatal_error!(reports; "expected {} but found eof", what)
-        }
-    }
-
-    pub fn consume_ident(&mut self) -> Reported<Ident> {
-
-        let mut reports = Reported::new();
-
-        loop {
-            let token = merge_reports!(reports, self.pop_token("identifier"));
-            let span = token.span;
-            match token.ty {
-                TT::AlphaNum => {
-                    break match merge_reports!(reports, AlphaNum::parse(token)) {
-                        AlphaNum::Ident(ident) => reports.complete(ident),
-                        _ => {
-                            fatal_error!(reports; "expected identifier but found literal"; span)
-                        }
-                    };
-                },
-                TT::Str | TT::Char => {
-                    fatal_error!(reports; "expected identifier but found literal"; span)
-                },
-                TT::Punct => {
-                    fatal_error!(reports; "expected identifier but found unexpected symbol"; span)
-                },
-                TT::LineBreak => {}
-            }
-        }
-    }
-
-    pub fn consume_expr(&mut self, is_bracket: bool) -> Reported<Expr> {
-        // the shunting-yard algorithm
-        // https://en.wikipedia.org/wiki/Shunting-yard_algorithm
-
-        let mut reports = Reported::new();
-
-        let mut output = Vec::new();
-        let mut stack = Vec::<StackElement>::new();
-
-        #[derive(Debug)]
-        enum StackElement {
-            Expr(Expr),
-            BinOp(BinOpKind, Span),
-            Delim,
-        }
-
-        while let Some(token) = { self.token_stack.pop() } {
-            match token.ty {
-                TT::AlphaNum => {
-                    let expr = match merge_reports!(reports, AlphaNum::parse(token)) {
-                        AlphaNum::Ident(ident) => Expr::Ref(ident),
-                        AlphaNum::Int(int) => Expr::Int(int),
-                        AlphaNum::Float(float) => Expr::Float(float),
-                    };
-                    output.push(StackElement::Expr(expr));
-                },
-                TT::Str => {
-                    let Token { value, span, .. } = token;
-                    let unquoted = value[1..value.len() - 1].into();
-                    // FIXME: resolve escapes
-                    let expr = Expr::Str(StrLit {
-                        value: unquoted,
-                        span,
-                    });
-                    output.push(StackElement::Expr(expr));
-                },
-                TT::Char => {
-                    let Token { value, span, .. } = token;
-                    // FIXME: resolve escapes
-                    let unquoted = &value[1..value.len() - 1].encode_utf16().collect::<Vec<_>>();
-                    if unquoted.len() != 1 {
-                        fatal_error!(reports; "character literals must contain exactly one utf16 character"; span);
-                    }
-                    let expr = Expr::Char(CharLit {
-                        value: unquoted[0],
-                        span,
-                    });
-                    output.push(StackElement::Expr(expr));
-                },
-                TT::LineBreak => {
-                    if !is_bracket {
-                        self.token_stack.push(token);
-                        break;
-                    }
-                }
-                TT::Punct => {
-                    match token.value.as_str() {
-                        // TODO: handle unary ops
-                        "+" | "-" | "*" | "/" |
-                        "%" | "&" | "|" | "^" => {
-                            let op = BinOpKind::from_str(&token.value).unwrap();
-                            while let Some(top) = { stack.pop() } {
-                                match top {
-                                    StackElement::BinOp(op2, _) if !(op2 < op) => {
-                                        output.push(top);
-                                    },
-                                    _ => {
-                                        stack.push(top);
-                                        break
-                                    },
-                                }
-                            }
-                            stack.push(StackElement::BinOp(op, token.span));
-                        },
-                        "(" => {
-                            stack.push(StackElement::Delim);
-                        },
-                        ")" => {
-                            let mut parens_match = false;
-                            while let Some(top) = { stack.pop() } {
-                                match top {
-                                    StackElement::Delim => {
-                                        parens_match = true;
-                                        break;
-                                    },
-                                    _ => output.push(top),
-                                }
-                            }
-                            if !parens_match {
-                                fatal_error!(reports; "unmatched parens")
-                            }
-                        },
-                        "[" => {
-                            let line = merge_reports!(reports, self.consume_source_line(true));
-                            let instruction = merge_reports!(reports, Instruction::from_source(line));
-                            output.push(StackElement::Expr(Expr::Bracket(Box::new(instruction))));
-                        },
-                        "]" => {
-                            if is_bracket {
-                                self.token_stack.push(token);
-                                break;
-                            }
-                        },
-                        "," => {
-                            self.token_stack.push(token);
-                            break;
-                        }
-                        _ => {
-                            fatal_error!(reports; "unexpected symbol {}", token.value; token.span)
-                        },
-                    }
-                }
-            }
-        }
-
-        while let Some(top) = stack.pop() {
-            output.push(top);
-        }
-
-        fn consume_output(stack: &mut Vec<StackElement>) -> Reported<Expr> {
-            let mut reports = Reported::new();
-            match stack.pop() {
-                Some(StackElement::Expr(expr)) => reports.complete(expr),
-                Some(StackElement::BinOp(op, span)) => {
-                    // backwards, since we're popping off the back
-                    let second = merge_reports!(reports, consume_output(stack));
-                    let first = merge_reports!(reports, consume_output(stack));
-                    reports.complete(Expr::BinOp(Box::new(first), op, Box::new(second)))
-                },
-                // delimiters can't appear in the operand stack
-                Some(_) => unreachable!(),
-                // hmm... we ran out of stuff to parse
-                None => {
-                    fatal_error!(reports; "")
-                } // FIXME: this error
-            }
-        }
-
-        let expr = merge_reports!(reports, consume_output(&mut output));
-
-        if !output.is_empty() {
-            fatal_error!(reports; "orphaned expr"; match output.pop().unwrap() {
-                StackElement::Expr(expr) => expr.span(),
-                StackElement::BinOp(_, span) => span,
-                _ => unreachable!(),
-            })
-        }
-
-        reports.complete(expr)
-    }
-
-    pub fn consume_source_line(&mut self, is_bracket: bool) -> Reported<SourceLine> {
-        let mut reports = Reported::new();
-
-        let (label, instruction, mut span) = {
-            let maybe_label = merge_reports!(reports, self.consume_ident());
-            let maybe_colon = self.token_stack.pop();
-            if maybe_colon.is_some() && maybe_colon.as_ref().unwrap().value == ":" {
-                let instruction = merge_reports!(reports, self.consume_ident());
-                let maybe_colon = maybe_colon.unwrap();
-                let span = maybe_label.span().extend_to(instruction.span().end);
-                (Some(maybe_label), instruction, span)
-            } else {
-                if let Some(token) = maybe_colon {
-                    self.token_stack.push(token);
-                }
-                let span = maybe_label.span();
-                (None, maybe_label, span)
-            }
-        };
-
-        let mut args = Vec::new();
-        let mut scanning_for_comma = false;
-
-        while let Some(token) = { self.token_stack.pop() } {
-            match token.ty {
-                TT::LineBreak => {
-                    if !is_bracket {
-                        break;
-                    }
-                },
-                TT::Punct => {
-                    match token.value.as_str() {
-                        "," => {
-                            if scanning_for_comma {
-                                scanning_for_comma = false;
-                                span.extend_to(token.span.end);
-                            } else {
-                                fatal_error!(reports; "expected expression, found `,`"; token.span)
-                            }
-                        },
-                        "]" => {
-                            if is_bracket {
-                                break;
-                            }
-                        }
-                        _ => {
-                            self.token_stack.push(token);
-                            let expr = merge_reports!(reports, self.consume_expr(is_bracket));
-                            span.extend_to_mut(expr.span().end);
-                            args.push(expr);
-                            scanning_for_comma = true;
-                        },
-                    }
-                },
-                _ => {
-                    self.token_stack.push(token);
-                    let expr = merge_reports!(reports, self.consume_expr(is_bracket));
-                    span.extend_to_mut(expr.span().end);
-                    args.push(expr);
-                    scanning_for_comma = true;
-                },
-            }
-        }
-
-        reports.complete(SourceLine{
-            label, instruction, args, span,
-        })
-    }
-
-    pub fn consume_all(&mut self) -> Reported<Vec<Instruction>> {
-        let mut reports = Reported::new();
-        let mut lines = Vec::new();
-        while !self.token_stack.is_empty() {
-            let line = reports.merge(self.consume_source_line(false));
-            if let Some(line) = line {
-                let instruction = reports.merge(Instruction::from_source(line));
-                if let Some(inst) = instruction {
-                    lines.push(inst);
-                }
-            }
-        }
-       reports.complete(lines)
-    }
-
-}
-
-enum AlphaNum {
-    Ident(Ident),
-    Int(IntLit),
-    Float(FloatLit),
-}
-
-impl AlphaNum {
-    fn parse(token: Token) -> Reported<AlphaNum> {
-        let mut reports = Reported::new();
-
-        let Token { value, span, .. } = token;
-
-        let mut iter = value.chars();
-        let first = iter.next().unwrap();
-        match first {
-            '0' ... '9' => {
-                if value.contains('.') ||
-                    value.contains('e') {
-                    use std::str::FromStr;
-                    if let Ok(num) = f64::from_str(&value[..]) {
-                        reports.complete(AlphaNum::Float(FloatLit{ value: num, span }))
-                    } else {
-                        fatal_error!(reports; "invalid numeric literal"; span)
-                    }
-                } else {
-                    let num =
-                        if value.starts_with("0b") {
-                            i64::from_str_radix(&value[2..], 2)
-                        } else if value.starts_with("0o") {
-                            i64::from_str_radix(&value[2..], 8)
-                        } else if value.starts_with("0x") {
-                            i64::from_str_radix(&value[2..], 16)
-                        } else {
-                            i64::from_str_radix(&value[..], 10)
-                        };
-                    if let Ok(num) = num {
-                        reports.complete(AlphaNum::Int(IntLit{ value: num, span }))
-                    } else {
-                        fatal_error!(reports; "invalid numeric literal"; span)
-                    }
-                }
-            },
-            _ => {
-                // only two magic identifiers can
-                // have angle brackets
-                if (value.contains('<') ||
-                    value.contains('>')) &&
-                    !(value == "<init>" || value == "<clinit>"){
-                    fatal_error!(reports; "only the identifiers `<init>` and `<clinit>` may contain `<` or `>`"; span)
-                }
-                reports.complete(AlphaNum::Ident(Ident { name: value.clone(), span }))
-            },
         }
     }
 }
