@@ -25,9 +25,9 @@ pub enum Instruction {
     PushByte(i8),
     PushShort(i16),
     
-    LoadConstant(ConstantIndex),
-    WideLoadConstant(WideConstantIndex),
-    WideLoadWideConstant(WideConstantIndex),
+    LoadConstant(HalfConstantIndex),
+    WideLoadConstant(ConstantIndex),
+    WideLoadWideConstant(ConstantIndex),
     
     
     LoadInt(VarIndex),

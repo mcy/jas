@@ -1,5 +1,6 @@
 extern crate classfile;
 extern crate either;
+extern crate base64;
 
 #[macro_use]
 pub mod reporting;
@@ -17,7 +18,7 @@ use std::io::prelude::*;
 
 fn main() {
 
-    let lexer = lexer::Lexer::new(include_str!("example.j").into());
+    let lexer = lexer::Lexer::new(include_str!("hello.j").into());
 
     let tokens = lexer.collect::<Vec<_>>();
 
@@ -28,11 +29,16 @@ fn main() {
 
     let mut sections = trans::ClassSection::from_instructions(ast).unwrap();
 
-    for section in sections {
+    for (i, section) in sections.into_iter().enumerate() {
         let mut partial = trans::PartialClass::new();
         let x = partial.process_section(section);
         println!("{:?}", partial);
         println!("{:?}", x);
+
+        let class = partial.assemble_class();
+
+        let mut file = File::create("Hello.class").unwrap();
+        io::emit_class(&class, &mut file).unwrap();
     }
 
 }

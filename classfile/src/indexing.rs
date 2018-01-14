@@ -3,20 +3,20 @@ use byteorder::*;
 use std::io;
 
 #[derive(Clone, Debug)]
+pub struct HalfConstantIndex(pub u8);
+
+impl HalfConstantIndex {
+    pub fn len() -> usize {
+        1
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct ConstantIndex(pub u16);
 
 impl ConstantIndex {
     pub fn len() -> usize {
         2
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct WideConstantIndex(pub u32);
-
-impl WideConstantIndex {
-    pub fn len() -> usize {
-        4
     }
 }
 
@@ -58,9 +58,9 @@ impl WideVarIndex {
 
 pub trait ReadIndexExt: io::Read {
 
-    fn read_constant_index(&mut self) -> io::Result<ConstantIndex>;
+    fn read_half_constant_index(&mut self) -> io::Result<HalfConstantIndex>;
 
-    fn read_wide_constant_index(&mut self) -> io::Result<WideConstantIndex>;
+    fn read_constant_index(&mut self) -> io::Result<ConstantIndex>;
 
     fn read_code_index(&mut self) -> io::Result<CodeIndex>;
 
@@ -73,12 +73,12 @@ pub trait ReadIndexExt: io::Read {
 
 impl<R> ReadIndexExt for R where R: io::Read  {
 
-    fn read_constant_index(&mut self) -> io::Result<ConstantIndex> {
-        Ok(ConstantIndex(self.read_u16::<BigEndian>()?))
+    fn read_half_constant_index(&mut self) -> io::Result<HalfConstantIndex> {
+        Ok(HalfConstantIndex(self.read_u8()?))
     }
 
-    fn read_wide_constant_index(&mut self) -> io::Result<WideConstantIndex> {
-        Ok(WideConstantIndex(self.read_u32::<BigEndian>()?))
+    fn read_constant_index(&mut self) -> io::Result<ConstantIndex> {
+        Ok(ConstantIndex(self.read_u16::<BigEndian>()?))
     }
 
     fn read_code_index(&mut self) -> io::Result<CodeIndex> {
@@ -100,9 +100,9 @@ impl<R> ReadIndexExt for R where R: io::Read  {
 
 pub trait WriteIndexExt: io::Write {
 
-    fn write_constant_index(&mut self, index: &ConstantIndex) -> io::Result<()>;
+    fn write_half_constant_index(&mut self, index: &HalfConstantIndex) -> io::Result<()>;
 
-    fn write_wide_constant_index(&mut self, index: &WideConstantIndex) -> io::Result<()>;
+    fn write_constant_index(&mut self, index: &ConstantIndex) -> io::Result<()>;
 
     fn write_code_index(&mut self, index: &CodeIndex) -> io::Result<()>;
 
@@ -115,12 +115,12 @@ pub trait WriteIndexExt: io::Write {
 
 impl<W> WriteIndexExt for W where W: io::Write  {
 
-    fn write_constant_index(&mut self, index: &ConstantIndex) -> io::Result<()> {
-        self.write_u16::<BigEndian>(index.0)
+    fn write_half_constant_index(&mut self, index: &HalfConstantIndex) -> io::Result<()> {
+        self.write_u8(index.0)
     }
 
-    fn write_wide_constant_index(&mut self, index: &WideConstantIndex) -> io::Result<()> {
-        self.write_u32::<BigEndian>(index.0)
+    fn write_constant_index(&mut self, index: &ConstantIndex) -> io::Result<()> {
+        self.write_u16::<BigEndian>(index.0)
     }
 
     fn write_code_index(&mut self, index: &CodeIndex) -> io::Result<()> {

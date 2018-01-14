@@ -1,11 +1,10 @@
 ;
 ; define the class jas.example.Hello
 ;
-            class           "jas/example/Hello"
-            super           "java/lang/Object"
+            class           "jas/example/Hello", "java/lang/Object"
             impl            "jas/example/Foo"
-            flags           public
-            version         "51, 0"
+            flags           public, super
+            version         0, 51
 
 System:     class_ref       "java/lang/System"                      ; declare a class ref constant
 
@@ -43,7 +42,7 @@ inst_str:   string          "Hello, instance!"
 instance:   method          "()V"
             flags           public
             getstatic       out
-            ldc             instance_str
+            ldc             inst_str
             invokevirtual   println
             return
 
@@ -71,7 +70,6 @@ getFoo:     method          "()I"
 ;
 ; define the interface jas.example.Foo
 ;
-            class           jas/example/Foo
-            super           java/lang/Object
+            class           "jas/example/Foo", "java/lang/Object"
             flags           public, interface
             version         51.0

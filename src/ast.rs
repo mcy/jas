@@ -5,17 +5,21 @@ use std::mem;
 
 #[derive(Clone, Debug)]
 pub struct Instruction {
-    label: Option<Ident>,
-    ident: Ident,
-    instruction: InstructionType,
-    span: Span,
+    pub label: Option<Ident>,
+    pub ident: Ident,
+    pub body: InstructionBody,
+    pub span: Span,
 }
 
 impl Instruction {
 
     pub fn from_source(line: SourceLine) -> Reported<Instruction> {
         use consts::instructions as inst;
-        use self::InstructionType::*;
+        
+        use self::ItemInstruction as ItemI;
+        use self::MetaInstruction as MetaI;
+        use self::ConstantInstruction as ConstantI;
+        use self::CodeInstruction as CodeI;
 
         let mut reports = Reported::new();
         let mut result: Option<Instruction> = None;
@@ -46,7 +50,7 @@ impl Instruction {
         fn min_args(reports: &mut Reported<Instruction>, line: &SourceLine, n: usize) -> bool{
             let len = line.args().len();
             if len < n {
-                    reports.report(report_error!(
+                reports.report(report_error!(
                     "not enough arguments for instruction `{}`, expected {}", line.instruction().value(), n;
                     line.instruction().span()
                 ));
@@ -60,10 +64,10 @@ impl Instruction {
         // into_iter'ing args
 
         macro_rules! op_tuple {
-            ($name:ident, $min:expr, $max:expr; $($field:expr),*) => {
-                op_tuple!($name, $min, $max; $($field),*;)
+            ($name:path, $ty:ident, $min:expr, $max:expr; $($field:expr),*) => {
+                op_tuple!($name, $ty, $min, $max; $($field),*;)
             };
-            ($name:ident, $min:expr, $max:expr; $($field:expr),*; $($opt:expr),*) => {
+            ($name:path, $ty:ident, $min:expr, $max:expr; $($field:expr),*; $($opt:expr),*) => {
                 if expected_args(&mut reports, &line, $min, $max) {
                     let op = {
                         let mut iter = line.args().iter();
@@ -78,7 +82,7 @@ impl Instruction {
                     result = Some(Instruction {
                         label,
                         ident: instruction,
-                        instruction: op,
+                        body: InstructionBody::$ty(op),
                         span,
                     });
                 }
@@ -86,10 +90,10 @@ impl Instruction {
         }
 
         macro_rules! op_struct {
-            ($name:ident, $min:expr, $max:expr; $($field:ident),*) => {
-                op_struct!($name, $min, $max; $($field),*;)
+            ($name:path, $ty:ident, $min:expr, $max:expr; $($field:ident),*) => {
+                op_struct!($name, $ty, $min, $max; $($field),*;)
             };
-            ($name:ident, $min:expr, $max:expr; $($field:ident),*; $($opt:ident),*) => {
+            ($name:path, $ty:ident, $min:expr, $max:expr; $($field:ident),*; $($opt:ident),*) => {
                 if expected_args(&mut reports, &line, $min, $max) {
                     let op = {
                         let mut iter = line.args().iter();
@@ -104,7 +108,7 @@ impl Instruction {
                     result = Some(Instruction {
                         label,
                         ident: instruction,
-                        instruction: op,
+                        body: InstructionBody::$ty(op),
                         span,
                     });
                 }
@@ -112,7 +116,7 @@ impl Instruction {
         }
 
         macro_rules! op_0 {
-            ($name:ident) => {
+            ($name:path, $ty:ident) => {
                 if expected_args(&mut reports, &line, 0, 0) {
                     let op = $name;
                     let SourceLine {
@@ -121,7 +125,7 @@ impl Instruction {
                     result = Some(Instruction {
                         label,
                         ident: instruction,
-                        instruction: op,
+                        body: InstructionBody::$ty(op),
                         span,
                     });
                 }
@@ -129,271 +133,285 @@ impl Instruction {
         }
 
         macro_rules! op_1 {
-            ($name:ident) => (op_tuple!($name, 1, 1; 0));
+            ($name:path, $ty:ident) => (op_tuple!($name, $ty, 1, 1; 0));
         }
 
         macro_rules! op_2 {
-            ($name:ident) => (op_tuple!($name, 2, 2; 0, 1));
+            ($name:path, $ty:ident) => (op_tuple!($name, $ty, 2, 2; 0, 1));
         }
 
         match line.instruction().value().clone().as_str() {
-            inst::CLASS => op_1!(Class),
-            inst::FIELD => op_struct!(Field, 1, 2; descriptor; name),
-            inst::METHOD => op_struct!(Field, 1, 2; descriptor; name),
+            inst::CLASS => op_struct!(ItemI::Class, Item, 2, 2; this_class, super_class),
+            inst::FIELD => op_struct!(ItemI::Field, Item, 1, 2; descriptor; name),
+            inst::METHOD => op_struct!(ItemI::Method, Item, 1, 2; descriptor; name),
 
-            inst::SUPER => op_1!(Super),
-            inst::IMPL => op_1!(Impl),
-            inst::VERSION => op_1!(Version),
-
-            inst::FLAGS => {
+            inst::IMPL => {
                 if min_args(&mut reports, &line, 1) {
-                    let op = Flags(line.args().clone());
+                    let op = MetaI::Impl(line.args().clone());
                     let SourceLine {
                         label, instruction, args, span,
                     } = line;
                     result = Some(Instruction {
                         label,
                         ident: instruction,
-                        instruction: op,
+                        body: InstructionBody::Meta(op),
                         span,
                     });
                 }
             }
-            inst::STACK => op_1!(Stack),
-            inst::LOCALS => op_1!(Locals),
-            inst::CATCH => op_struct!(Catch, 4, 4; start, end, handler, ty),
+            inst::VERSION => op_struct!(MetaI::Version, Meta, 2, 2; minor, major),
 
-            inst::ATTR => op_2!(Attr),
-            
-            inst::CLASS_REF => op_1!(ClassRef),
-            inst::FIELD_REF => op_struct!(FieldRef, 2, 3; class, name; descriptor),
-            inst::METHOD_REF => op_struct!(MethodRef, 2, 3; class, name; descriptor),
-            inst::INTERFACE_METHOD_REF => op_struct!(InterfaceMethodRef, 2, 3; class, name; descriptor),
-            inst::STRING => op_1!(String),
-            inst::INTEGER => op_1!(Integer),
-            inst::FLOAT => op_1!(Float),
-            inst::LONG => op_1!(Long),
-            inst::DOUBLE => op_1!(Double),
-            inst::NAME_AND_TYPE => op_2!(NameAndType),
-            inst::UTF8 => op_1!(Utf8),
-            inst::METHOD_HANDLE => op_struct!(MethodHandle, 2, 2; kind, referent),
-            inst::METHOD_TYPE => op_1!(MethodType),
-            inst::DYNAMIC_TARGET => op_struct!(DynamicTarget, 2, 3; bootstrap_method, name; descriptor),
+            inst::FLAGS => {
+                if min_args(&mut reports, &line, 1) {
+                    let op = MetaI::Flags(line.args().clone());
+                    let SourceLine {
+                        label, instruction, args, span,
+                    } = line;
+                    result = Some(Instruction {
+                        label,
+                        ident: instruction,
+                        body: InstructionBody::Meta(op),
+                        span,
+                    });
+                }
+            }
+            inst::STACK => op_1!(MetaI::Stack, Meta),
+            inst::LOCALS => op_1!(MetaI::Locals, Meta),
+            inst::CATCH => op_struct!(MetaI::Catch, Meta, 4, 4; start, end, handler, ty),
 
-            inst::NOP => op_0!(Nop),
+            inst::CONST_VALUE => op_1!(MetaI::ConstantValue, Meta),
 
-            inst::CONST_REF_NULL => op_0!(ConstRefNull),
-            inst::CONST_INT_M1 => op_0!(ConstIntM1),
-            inst::CONST_INT_0 => op_0!(ConstInt0),
-            inst::CONST_INT_1 => op_0!(ConstInt1),
-            inst::CONST_INT_2 => op_0!(ConstInt2),
-            inst::CONST_INT_3 => op_0!(ConstInt3),
-            inst::CONST_INT_4 => op_0!(ConstInt4),
-            inst::CONST_INT_5 => op_0!(ConstInt5),
-            inst::CONST_LONG_0 => op_0!(ConstLong0),
-            inst::CONST_LONG_1 => op_0!(ConstLong1),
-            inst::CONST_FLOAT_0 => op_0!(ConstFloat0),
-            inst::CONST_FLOAT_1 => op_0!(ConstFloat1),
-            inst::CONST_FLOAT_2 => op_0!(ConstFloat2),
-            inst::CONST_DOUBLE_0 => op_0!(ConstDouble0),
-            inst::CONST_DOUBLE_1 => op_0!(ConstDouble1),
+            inst::ATTR => op_2!(MetaI::Attr, Meta),
 
-            inst::PUSH_BYTE => op_1!(PushByte),
-            inst::PUSH_SHORT => op_1!(PushShort),
+            inst::CLASS_REF => op_1!(ConstantI::ClassRef, Constant),
+            inst::FIELD_REF => op_struct!(ConstantI::FieldRef, Constant, 2, 3; class, name; descriptor),
+            inst::METHOD_REF => op_struct!(ConstantI::MethodRef, Constant, 2, 3; class, name; descriptor),
+            inst::INTERFACE_METHOD_REF => op_struct!(ConstantI::InterfaceMethodRef, Constant, 2, 3; class, name; descriptor),
+            inst::STRING => op_1!(ConstantI::String, Constant),
+            inst::INTEGER => op_1!(ConstantI::Integer, Constant),
+            inst::FLOAT => op_1!(ConstantI::Float, Constant),
+            inst::LONG => op_1!(ConstantI::Long, Constant),
+            inst::DOUBLE => op_1!(ConstantI::Double, Constant),
+            inst::NAME_AND_TYPE => op_2!(ConstantI::NameAndType, Constant),
+            inst::UTF8 => op_1!(ConstantI::Utf8, Constant),
+            inst::METHOD_HANDLE => op_struct!(ConstantI::MethodHandle, Constant, 2, 2; kind, referent),
+            inst::METHOD_TYPE => op_1!(ConstantI::MethodType, Constant),
+            inst::DYNAMIC_TARGET => op_struct!(ConstantI::DynamicTarget, Constant, 2, 3; bootstrap_method, name; descriptor),
 
-            inst::LOAD_CONSTANT => op_1!(LoadConstant),
-            inst::WIDE_LOAD_CONSTANT => op_1!(WideLoadConstant),
-            inst::WIDE_LOAD_WIDE_CONSTANT => op_1!(WideLoadWideConstant),
+            inst::NOP => op_0!(CodeI::Nop, Code),
 
+            inst::CONST_REF_NULL => op_0!(CodeI::ConstRefNull, Code),
+            inst::CONST_INT_M1 => op_0!(CodeI::ConstIntM1, Code),
+            inst::CONST_INT_0 => op_0!(CodeI::ConstInt0, Code),
+            inst::CONST_INT_1 => op_0!(CodeI::ConstInt1, Code),
+            inst::CONST_INT_2 => op_0!(CodeI::ConstInt2, Code),
+            inst::CONST_INT_3 => op_0!(CodeI::ConstInt3, Code),
+            inst::CONST_INT_4 => op_0!(CodeI::ConstInt4, Code),
+            inst::CONST_INT_5 => op_0!(CodeI::ConstInt5, Code),
+            inst::CONST_LONG_0 => op_0!(CodeI::ConstLong0, Code),
+            inst::CONST_LONG_1 => op_0!(CodeI::ConstLong1, Code),
+            inst::CONST_FLOAT_0 => op_0!(CodeI::ConstFloat0, Code),
+            inst::CONST_FLOAT_1 => op_0!(CodeI::ConstFloat1, Code),
+            inst::CONST_FLOAT_2 => op_0!(CodeI::ConstFloat2, Code),
+            inst::CONST_DOUBLE_0 => op_0!(CodeI::ConstDouble0, Code),
+            inst::CONST_DOUBLE_1 => op_0!(CodeI::ConstDouble1, Code),
 
-            inst::LOAD_INT => op_1!(LoadInt),
-            inst::LOAD_LONG => op_1!(LoadLong),
-            inst::LOAD_FLOAT => op_1!(LoadFloat),
-            inst::LOAD_DOUBLE => op_1!(LoadDouble),
-            inst::LOAD_REF => op_1!(LoadRef),
+            inst::PUSH_BYTE => op_1!(CodeI::PushByte, Code),
+            inst::PUSH_SHORT => op_1!(CodeI::PushShort, Code),
 
-            inst::LOAD_INT_0 => op_0!(LoadInt0),
-            inst::LOAD_INT_1 => op_0!(LoadInt1),
-            inst::LOAD_INT_2 => op_0!(LoadInt2),
-            inst::LOAD_INT_3 => op_0!(LoadInt3),
-
-            inst::LOAD_LONG_0 => op_0!(LoadLong0),
-            inst::LOAD_LONG_1 => op_0!(LoadLong1),
-            inst::LOAD_LONG_2 => op_0!(LoadLong2),
-            inst::LOAD_LONG_3 => op_0!(LoadLong3),
-
-            inst::LOAD_FLOAT_0 => op_0!(LoadFloat0),
-            inst::LOAD_FLOAT_1 => op_0!(LoadFloat1),
-            inst::LOAD_FLOAT_2 => op_0!(LoadFloat2),
-            inst::LOAD_FLOAT_3 => op_0!(LoadFloat3),
-
-            inst::LOAD_DOUBLE_0 => op_0!(LoadDouble0),
-            inst::LOAD_DOUBLE_1 => op_0!(LoadDouble1),
-            inst::LOAD_DOUBLE_2 => op_0!(LoadDouble2),
-            inst::LOAD_DOUBLE_3 => op_0!(LoadDouble3),
-
-            inst::LOAD_REF_0 => op_0!(LoadRef0),
-            inst::LOAD_REF_1 => op_0!(LoadRef1),
-            inst::LOAD_REF_2 => op_0!(LoadRef2),
-            inst::LOAD_REF_3 => op_0!(LoadRef3),
-
-            inst::ARRAY_LOAD_INT => op_0!(ArrayLoadInt),
-            inst::ARRAY_LOAD_LONG => op_0!(ArrayLoadLong),
-            inst::ARRAY_LOAD_FLOAT => op_0!(ArrayLoadFloat),
-            inst::ARRAY_LOAD_DOUBLE => op_0!(ArrayLoadDouble),
-            inst::ARRAY_LOAD_REF => op_0!(ArrayLoadRef),
-            inst::ARRAY_LOAD_BYTE => op_0!(ArrayLoadByte),
-            inst::ARRAY_LOAD_CHAR => op_0!(ArrayLoadChar),
-            inst::ARRAY_LOAD_SHORT => op_0!(ArrayLoadShort),
+            inst::LOAD_CONSTANT => op_1!(CodeI::LoadConstant, Code),
+            inst::WIDE_LOAD_CONSTANT => op_1!(CodeI::WideLoadConstant, Code),
+            inst::WIDE_LOAD_WIDE_CONSTANT => op_1!(CodeI::WideLoadWideConstant, Code),
 
 
-            inst::STORE_INT => op_1!(StoreInt),
-            inst::STORE_LONG => op_1!(StoreLong),
-            inst::STORE_FLOAT => op_1!(StoreFloat),
-            inst::STORE_DOUBLE => op_1!(StoreDouble),
-            inst::STORE_REF => op_1!(StoreRef),
+            inst::LOAD_INT => op_1!(CodeI::LoadInt, Code),
+            inst::LOAD_LONG => op_1!(CodeI::LoadLong, Code),
+            inst::LOAD_FLOAT => op_1!(CodeI::LoadFloat, Code),
+            inst::LOAD_DOUBLE => op_1!(CodeI::LoadDouble, Code),
+            inst::LOAD_REF => op_1!(CodeI::LoadRef, Code),
 
-            inst::STORE_INT_0 => op_0!(StoreInt0),
-            inst::STORE_INT_1 => op_0!(StoreInt1),
-            inst::STORE_INT_2 => op_0!(StoreInt2),
-            inst::STORE_INT_3 => op_0!(StoreInt3),
+            inst::LOAD_INT_0 => op_0!(CodeI::LoadInt0, Code),
+            inst::LOAD_INT_1 => op_0!(CodeI::LoadInt1, Code),
+            inst::LOAD_INT_2 => op_0!(CodeI::LoadInt2, Code),
+            inst::LOAD_INT_3 => op_0!(CodeI::LoadInt3, Code),
 
-            inst::STORE_LONG_0 => op_0!(StoreLong0),
-            inst::STORE_LONG_1 => op_0!(StoreLong1),
-            inst::STORE_LONG_2 => op_0!(StoreLong2),
-            inst::STORE_LONG_3 => op_0!(StoreLong3),
+            inst::LOAD_LONG_0 => op_0!(CodeI::LoadLong0, Code),
+            inst::LOAD_LONG_1 => op_0!(CodeI::LoadLong1, Code),
+            inst::LOAD_LONG_2 => op_0!(CodeI::LoadLong2, Code),
+            inst::LOAD_LONG_3 => op_0!(CodeI::LoadLong3, Code),
 
-            inst::STORE_FLOAT_0 => op_0!(StoreFloat0),
-            inst::STORE_FLOAT_1 => op_0!(StoreFloat1),
-            inst::STORE_FLOAT_2 => op_0!(StoreFloat2),
-            inst::STORE_FLOAT_3 => op_0!(StoreFloat3),
+            inst::LOAD_FLOAT_0 => op_0!(CodeI::LoadFloat0, Code),
+            inst::LOAD_FLOAT_1 => op_0!(CodeI::LoadFloat1, Code),
+            inst::LOAD_FLOAT_2 => op_0!(CodeI::LoadFloat2, Code),
+            inst::LOAD_FLOAT_3 => op_0!(CodeI::LoadFloat3, Code),
 
-            inst::STORE_DOUBLE_0 => op_0!(StoreDouble0),
-            inst::STORE_DOUBLE_1 => op_0!(StoreDouble1),
-            inst::STORE_DOUBLE_2 => op_0!(StoreDouble2),
-            inst::STORE_DOUBLE_3 => op_0!(StoreDouble3),
+            inst::LOAD_DOUBLE_0 => op_0!(CodeI::LoadDouble0, Code),
+            inst::LOAD_DOUBLE_1 => op_0!(CodeI::LoadDouble1, Code),
+            inst::LOAD_DOUBLE_2 => op_0!(CodeI::LoadDouble2, Code),
+            inst::LOAD_DOUBLE_3 => op_0!(CodeI::LoadDouble3, Code),
 
-            inst::STORE_REF_0 => op_0!(StoreRef0),
-            inst::STORE_REF_1 => op_0!(StoreRef1),
-            inst::STORE_REF_2 => op_0!(StoreRef2),
-            inst::STORE_REF_3 => op_0!(StoreRef3),
+            inst::LOAD_REF_0 => op_0!(CodeI::LoadRef0, Code),
+            inst::LOAD_REF_1 => op_0!(CodeI::LoadRef1, Code),
+            inst::LOAD_REF_2 => op_0!(CodeI::LoadRef2, Code),
+            inst::LOAD_REF_3 => op_0!(CodeI::LoadRef3, Code),
 
-            inst::ARRAY_STORE_INT => op_0!(ArrayStoreInt),
-            inst::ARRAY_STORE_LONG => op_0!(ArrayStoreLong),
-            inst::ARRAY_STORE_FLOAT => op_0!(ArrayStoreFloat),
-            inst::ARRAY_STORE_DOUBLE => op_0!(ArrayStoreDouble),
-            inst::ARRAY_STORE_REF => op_0!(ArrayStoreRef),
-            inst::ARRAY_STORE_BYTE => op_0!(ArrayStoreByte),
-            inst::ARRAY_STORE_CHAR => op_0!(ArrayStoreChar),
-            inst::ARRAY_STORE_SHORT => op_0!(ArrayStoreShort),
-
-
-            inst::POP => op_0!(Pop),
-            inst::DOUBLE_POP => op_0!(DoublePop),
-
-            inst::DUP => op_0!(Dup),
-            inst::DUP_DOWN => op_0!(DupDown),
-            inst::DUP_DOUBLE_DOWN => op_0!(DupDoubleDown),
-            inst::DOUBLE_DUP => op_0!(DoubleDup),
-            inst::DOUBLE_DUP_DOWN => op_0!(DoubleDupDown),
-            inst::DOUBLE_DUP_DOUBLE_DOWN => op_0!(DoubleDupDoubleDown),
-
-            inst::SWAP => op_0!(Swap),
+            inst::ARRAY_LOAD_INT => op_0!(CodeI::ArrayLoadInt, Code),
+            inst::ARRAY_LOAD_LONG => op_0!(CodeI::ArrayLoadLong, Code),
+            inst::ARRAY_LOAD_FLOAT => op_0!(CodeI::ArrayLoadFloat, Code),
+            inst::ARRAY_LOAD_DOUBLE => op_0!(CodeI::ArrayLoadDouble, Code),
+            inst::ARRAY_LOAD_REF => op_0!(CodeI::ArrayLoadRef, Code),
+            inst::ARRAY_LOAD_BYTE => op_0!(CodeI::ArrayLoadByte, Code),
+            inst::ARRAY_LOAD_CHAR => op_0!(CodeI::ArrayLoadChar, Code),
+            inst::ARRAY_LOAD_SHORT => op_0!(CodeI::ArrayLoadShort, Code),
 
 
-            inst::ADD_INT => op_0!(AddInt),
-            inst::ADD_LONG => op_0!(AddLong),
-            inst::ADD_FLOAT => op_0!(AddFloat),
-            inst::ADD_DOUBLE => op_0!(AddDouble),
+            inst::STORE_INT => op_1!(CodeI::StoreInt, Code),
+            inst::STORE_LONG => op_1!(CodeI::StoreLong, Code),
+            inst::STORE_FLOAT => op_1!(CodeI::StoreFloat, Code),
+            inst::STORE_DOUBLE => op_1!(CodeI::StoreDouble, Code),
+            inst::STORE_REF => op_1!(CodeI::StoreRef, Code),
 
-            inst::SUB_INT => op_0!(SubInt),
-            inst::SUB_LONG => op_0!(SubLong),
-            inst::SUB_FLOAT => op_0!(SubFloat),
-            inst::SUB_DOUBLE => op_0!(SubDouble),
+            inst::STORE_INT_0 => op_0!(CodeI::StoreInt0, Code),
+            inst::STORE_INT_1 => op_0!(CodeI::StoreInt1, Code),
+            inst::STORE_INT_2 => op_0!(CodeI::StoreInt2, Code),
+            inst::STORE_INT_3 => op_0!(CodeI::StoreInt3, Code),
 
-            inst::MUL_INT => op_0!(MulInt),
-            inst::MUL_LONG => op_0!(MulLong),
-            inst::MUL_FLOAT => op_0!(MulFloat),
-            inst::MUL_DOUBLE => op_0!(MulDouble),
+            inst::STORE_LONG_0 => op_0!(CodeI::StoreLong0, Code),
+            inst::STORE_LONG_1 => op_0!(CodeI::StoreLong1, Code),
+            inst::STORE_LONG_2 => op_0!(CodeI::StoreLong2, Code),
+            inst::STORE_LONG_3 => op_0!(CodeI::StoreLong3, Code),
 
-            inst::DIV_INT => op_0!(DivInt),
-            inst::DIV_LONG => op_0!(DivLong),
-            inst::DIV_FLOAT => op_0!(DivFloat),
-            inst::DIV_DOUBLE => op_0!(DivDouble),
+            inst::STORE_FLOAT_0 => op_0!(CodeI::StoreFloat0, Code),
+            inst::STORE_FLOAT_1 => op_0!(CodeI::StoreFloat1, Code),
+            inst::STORE_FLOAT_2 => op_0!(CodeI::StoreFloat2, Code),
+            inst::STORE_FLOAT_3 => op_0!(CodeI::StoreFloat3, Code),
 
-            inst::REM_INT => op_0!(RemInt),
-            inst::REM_LONG => op_0!(RemLong),
-            inst::REM_FLOAT => op_0!(RemFloat),
-            inst::REM_DOUBLE => op_0!(RemDouble),
+            inst::STORE_DOUBLE_0 => op_0!(CodeI::StoreDouble0, Code),
+            inst::STORE_DOUBLE_1 => op_0!(CodeI::StoreDouble1, Code),
+            inst::STORE_DOUBLE_2 => op_0!(CodeI::StoreDouble2, Code),
+            inst::STORE_DOUBLE_3 => op_0!(CodeI::StoreDouble3, Code),
 
-            inst::NEG_INT => op_0!(NegInt),
-            inst::NEG_LONG => op_0!(NegLong),
-            inst::NEG_FLOAT => op_0!(NegFloat),
-            inst::NEG_DOUBLE => op_0!(NegDouble),
+            inst::STORE_REF_0 => op_0!(CodeI::StoreRef0, Code),
+            inst::STORE_REF_1 => op_0!(CodeI::StoreRef1, Code),
+            inst::STORE_REF_2 => op_0!(CodeI::StoreRef2, Code),
+            inst::STORE_REF_3 => op_0!(CodeI::StoreRef3, Code),
 
-            inst::LEFT_SHIFT_INT => op_0!(LeftShiftInt),
-            inst::LEFT_SHIFT_LONG => op_0!(LeftShiftLong),
-            inst::RIGHT_SHIFT_INT => op_0!(RightShiftInt),
-            inst::RIGHT_SHIFT_LONG => op_0!(RightShiftLong),
-            inst::URIGHT_SHIFT_INT => op_0!(URightShiftInt),
-            inst::URIGHT_SHIFT_LONG => op_0!(URightShiftLong),
-
-            inst::AND_INT => op_0!(AndInt),
-            inst::AND_LONG => op_0!(AndLong),
-
-            inst::OR_INT => op_0!(OrInt),
-            inst::OR_LONG => op_0!(OrLong),
-
-            inst::XOR_INT => op_0!(XorInt),
-            inst::XOR_LONG => op_0!(XorLong),
-
-            inst::INC_INT => op_2!(IncInt),
+            inst::ARRAY_STORE_INT => op_0!(CodeI::ArrayStoreInt, Code),
+            inst::ARRAY_STORE_LONG => op_0!(CodeI::ArrayStoreLong, Code),
+            inst::ARRAY_STORE_FLOAT => op_0!(CodeI::ArrayStoreFloat, Code),
+            inst::ARRAY_STORE_DOUBLE => op_0!(CodeI::ArrayStoreDouble, Code),
+            inst::ARRAY_STORE_REF => op_0!(CodeI::ArrayStoreRef, Code),
+            inst::ARRAY_STORE_BYTE => op_0!(CodeI::ArrayStoreByte, Code),
+            inst::ARRAY_STORE_CHAR => op_0!(CodeI::ArrayStoreChar, Code),
+            inst::ARRAY_STORE_SHORT => op_0!(CodeI::ArrayStoreShort, Code),
 
 
-            inst::INT_TO_LONG => op_0!(IntToLong),
-            inst::INT_TO_FLOAT => op_0!(IntToFloat),
-            inst::INT_TO_DOUBLE => op_0!(IntToDouble),
-            inst::LONG_TO_INT => op_0!(LongToInt),
-            inst::LONG_TO_FLOAT => op_0!(LongToFloat),
-            inst::LONG_TO_DOUBLE => op_0!(LongToDouble),
-            inst::FLOAT_TO_INT => op_0!(FloatToInt),
-            inst::FLOAT_TO_LONG => op_0!(FloatToLong),
-            inst::FLOAT_TO_DOUBLE => op_0!(FloatToDouble),
-            inst::DOUBLE_TO_INT => op_0!(DoubleToInt),
-            inst::DOUBLE_TO_LONG => op_0!(DoubleToLong),
-            inst::DOUBLE_TO_FLOAT => op_0!(DoubleToFloat),
+            inst::POP => op_0!(CodeI::Pop, Code),
+            inst::DOUBLE_POP => op_0!(CodeI::DoublePop, Code),
 
-            inst::INT_TO_BYTE => op_0!(IntToByte),
-            inst::INT_TO_CHAR => op_0!(IntToChar),
-            inst::INT_TO_SHORT => op_0!(IntToShort),
+            inst::DUP => op_0!(CodeI::Dup, Code),
+            inst::DUP_DOWN => op_0!(CodeI::DupDown, Code),
+            inst::DUP_DOUBLE_DOWN => op_0!(CodeI::DupDoubleDown, Code),
+            inst::DOUBLE_DUP => op_0!(CodeI::DoubleDup, Code),
+            inst::DOUBLE_DUP_DOWN => op_0!(CodeI::DoubleDupDown, Code),
+            inst::DOUBLE_DUP_DOUBLE_DOWN => op_0!(CodeI::DoubleDupDoubleDown, Code),
+
+            inst::SWAP => op_0!(CodeI::Swap, Code),
 
 
-            inst::COMPARE_LONG => op_0!(CompareLong),
-            inst::COMPARE_FLOAT_L => op_0!(CompareFloatL),
-            inst::COMPARE_FLOAT_G => op_0!(CompareFloatG),
-            inst::COMPARE_DOUBLE_L => op_0!(CompareDoubleL),
-            inst::COMPARE_DOUBLE_G => op_0!(CompareDoubleG),
+            inst::ADD_INT => op_0!(CodeI::AddInt, Code),
+            inst::ADD_LONG => op_0!(CodeI::AddLong, Code),
+            inst::ADD_FLOAT => op_0!(CodeI::AddFloat, Code),
+            inst::ADD_DOUBLE => op_0!(CodeI::AddDouble, Code),
 
-            inst::IF_INT_EQ_0 => op_1!(IfIntEq0),
-            inst::IF_INT_NE_0 => op_1!(IfIntNe0),
-            inst::IF_INT_LT_0 => op_1!(IfIntLt0),
-            inst::IF_INT_GE_0 => op_1!(IfIntGe0),
-            inst::IF_INT_GT_0 => op_1!(IfIntGt0),
-            inst::IF_INT_LE_0 => op_1!(IfIntLe0),
+            inst::SUB_INT => op_0!(CodeI::SubInt, Code),
+            inst::SUB_LONG => op_0!(CodeI::SubLong, Code),
+            inst::SUB_FLOAT => op_0!(CodeI::SubFloat, Code),
+            inst::SUB_DOUBLE => op_0!(CodeI::SubDouble, Code),
 
-            inst::IF_INT_EQ => op_1!(IfIntEq),
-            inst::IF_INT_NE => op_1!(IfIntNe),
-            inst::IF_INT_LT => op_1!(IfIntLt),
-            inst::IF_INT_GE => op_1!(IfIntGe),
-            inst::IF_INT_GT => op_1!(IfIntGt),
-            inst::IF_INT_LE => op_1!(IfIntLe),
+            inst::MUL_INT => op_0!(CodeI::MulInt, Code),
+            inst::MUL_LONG => op_0!(CodeI::MulLong, Code),
+            inst::MUL_FLOAT => op_0!(CodeI::MulFloat, Code),
+            inst::MUL_DOUBLE => op_0!(CodeI::MulDouble, Code),
 
-            inst::IF_REF_EQ => op_1!(IfRefEq),
-            inst::IF_REF_NE => op_1!(IfRefNe),
+            inst::DIV_INT => op_0!(CodeI::DivInt, Code),
+            inst::DIV_LONG => op_0!(CodeI::DivLong, Code),
+            inst::DIV_FLOAT => op_0!(CodeI::DivFloat, Code),
+            inst::DIV_DOUBLE => op_0!(CodeI::DivDouble, Code),
 
-            inst::GOTO => op_1!(Goto),
-            inst::JUMP_SUB => op_1!(JumpSub),
-            inst::RET_SUB => op_1!(RetSub),
+            inst::REM_INT => op_0!(CodeI::RemInt, Code),
+            inst::REM_LONG => op_0!(CodeI::RemLong, Code),
+            inst::REM_FLOAT => op_0!(CodeI::RemFloat, Code),
+            inst::REM_DOUBLE => op_0!(CodeI::RemDouble, Code),
+
+            inst::NEG_INT => op_0!(CodeI::NegInt, Code),
+            inst::NEG_LONG => op_0!(CodeI::NegLong, Code),
+            inst::NEG_FLOAT => op_0!(CodeI::NegFloat, Code),
+            inst::NEG_DOUBLE => op_0!(CodeI::NegDouble, Code),
+
+            inst::LEFT_SHIFT_INT => op_0!(CodeI::LeftShiftInt, Code),
+            inst::LEFT_SHIFT_LONG => op_0!(CodeI::LeftShiftLong, Code),
+            inst::RIGHT_SHIFT_INT => op_0!(CodeI::RightShiftInt, Code),
+            inst::RIGHT_SHIFT_LONG => op_0!(CodeI::RightShiftLong, Code),
+            inst::URIGHT_SHIFT_INT => op_0!(CodeI::URightShiftInt, Code),
+            inst::URIGHT_SHIFT_LONG => op_0!(CodeI::URightShiftLong, Code),
+
+            inst::AND_INT => op_0!(CodeI::AndInt, Code),
+            inst::AND_LONG => op_0!(CodeI::AndLong, Code),
+
+            inst::OR_INT => op_0!(CodeI::OrInt, Code),
+            inst::OR_LONG => op_0!(CodeI::OrLong, Code),
+
+            inst::XOR_INT => op_0!(CodeI::XorInt, Code),
+            inst::XOR_LONG => op_0!(CodeI::XorLong, Code),
+
+            inst::INC_INT => op_2!(CodeI::IncInt, Code),
+
+
+            inst::INT_TO_LONG => op_0!(CodeI::IntToLong, Code),
+            inst::INT_TO_FLOAT => op_0!(CodeI::IntToFloat, Code),
+            inst::INT_TO_DOUBLE => op_0!(CodeI::IntToDouble, Code),
+            inst::LONG_TO_INT => op_0!(CodeI::LongToInt, Code),
+            inst::LONG_TO_FLOAT => op_0!(CodeI::LongToFloat, Code),
+            inst::LONG_TO_DOUBLE => op_0!(CodeI::LongToDouble, Code),
+            inst::FLOAT_TO_INT => op_0!(CodeI::FloatToInt, Code),
+            inst::FLOAT_TO_LONG => op_0!(CodeI::FloatToLong, Code),
+            inst::FLOAT_TO_DOUBLE => op_0!(CodeI::FloatToDouble, Code),
+            inst::DOUBLE_TO_INT => op_0!(CodeI::DoubleToInt, Code),
+            inst::DOUBLE_TO_LONG => op_0!(CodeI::DoubleToLong, Code),
+            inst::DOUBLE_TO_FLOAT => op_0!(CodeI::DoubleToFloat, Code),
+
+            inst::INT_TO_BYTE => op_0!(CodeI::IntToByte, Code),
+            inst::INT_TO_CHAR => op_0!(CodeI::IntToChar, Code),
+            inst::INT_TO_SHORT => op_0!(CodeI::IntToShort, Code),
+
+
+            inst::COMPARE_LONG => op_0!(CodeI::CompareLong, Code),
+            inst::COMPARE_FLOAT_L => op_0!(CodeI::CompareFloatL, Code),
+            inst::COMPARE_FLOAT_G => op_0!(CodeI::CompareFloatG, Code),
+            inst::COMPARE_DOUBLE_L => op_0!(CodeI::CompareDoubleL, Code),
+            inst::COMPARE_DOUBLE_G => op_0!(CodeI::CompareDoubleG, Code),
+
+            inst::IF_INT_EQ_0 => op_1!(CodeI::IfIntEq0, Code),
+            inst::IF_INT_NE_0 => op_1!(CodeI::IfIntNe0, Code),
+            inst::IF_INT_LT_0 => op_1!(CodeI::IfIntLt0, Code),
+            inst::IF_INT_GE_0 => op_1!(CodeI::IfIntGe0, Code),
+            inst::IF_INT_GT_0 => op_1!(CodeI::IfIntGt0, Code),
+            inst::IF_INT_LE_0 => op_1!(CodeI::IfIntLe0, Code),
+
+            inst::IF_INT_EQ => op_1!(CodeI::IfIntEq, Code),
+            inst::IF_INT_NE => op_1!(CodeI::IfIntNe, Code),
+            inst::IF_INT_LT => op_1!(CodeI::IfIntLt, Code),
+            inst::IF_INT_GE => op_1!(CodeI::IfIntGe, Code),
+            inst::IF_INT_GT => op_1!(CodeI::IfIntGt, Code),
+            inst::IF_INT_LE => op_1!(CodeI::IfIntLe, Code),
+
+            inst::IF_REF_EQ => op_1!(CodeI::IfRefEq, Code),
+            inst::IF_REF_NE => op_1!(CodeI::IfRefNe, Code),
+
+            inst::GOTO => op_1!(CodeI::Goto, Code),
+            inst::JUMP_SUB => op_1!(CodeI::JumpSub, Code),
+            inst::RET_SUB => op_1!(CodeI::RetSub, Code),
 
             inst::TABLE_SWITCH => {
                 if min_args(&mut reports, &line, 3) {
@@ -406,7 +424,7 @@ impl Instruction {
                         for jump in iter {
                             offset_table.push(jump.clone());
                         }
-                        TableSwitch {
+                        CodeI::TableSwitch {
                             default_offset,
                             match_range: (match_start, match_end),
                             offset_table,
@@ -418,7 +436,7 @@ impl Instruction {
                     result = Some(Instruction {
                         label,
                         ident: instruction,
-                        instruction: op,
+                        body: InstructionBody::Code(op),
                         span,
                     });
                 }
@@ -443,7 +461,7 @@ impl Instruction {
                                 break;
                             }
                         }
-                        LookupSwitch {
+                        CodeI::LookupSwitch {
                             default_offset,
                             match_table,
                         }
@@ -454,44 +472,44 @@ impl Instruction {
                     result = Some(Instruction {
                         label,
                         ident: instruction,
-                        instruction: op,
+                        body: InstructionBody::Code(op),
                         span,
                     });
                 }
             },
 
-            inst::RETURN_INT => op_0!(ReturnInt),
-            inst::RETURN_LONG => op_0!(ReturnLong),
-            inst::RETURN_FLOAT => op_0!(ReturnFloat),
-            inst::RETURN_DOUBLE => op_0!(ReturnDouble),
-            inst::RETURN_REF => op_0!(ReturnRef),
-            inst::RETURN_VOID => op_0!(ReturnVoid),
+            inst::RETURN_INT => op_0!(CodeI::ReturnInt, Code),
+            inst::RETURN_LONG => op_0!(CodeI::ReturnLong, Code),
+            inst::RETURN_FLOAT => op_0!(CodeI::ReturnFloat, Code),
+            inst::RETURN_DOUBLE => op_0!(CodeI::ReturnDouble, Code),
+            inst::RETURN_REF => op_0!(CodeI::ReturnRef, Code),
+            inst::RETURN_VOID => op_0!(CodeI::ReturnVoid, Code),
 
 
-            inst::GET_STATIC_FIELD => op_1!(GetStaticField),
-            inst::PUT_STATIC_FIELD => op_1!(PutStaticField),
-            inst::GET_FIELD => op_1!(GetField),
-            inst::PUT_FIELD => op_1!(PutField),
+            inst::GET_STATIC_FIELD => op_1!(CodeI::GetStaticField, Code),
+            inst::PUT_STATIC_FIELD => op_1!(CodeI::PutStaticField, Code),
+            inst::GET_FIELD => op_1!(CodeI::GetField, Code),
+            inst::PUT_FIELD => op_1!(CodeI::PutField, Code),
 
-            inst::INVOKE_VIRTUAL => op_1!(InvokeVirtual),
-            inst::INVOKE_SPECIAL => op_1!(InvokeSpecial),
-            inst::INVOKE_STATIC => op_1!(InvokeStatic),
-            inst::INVOKE_INTERFACE => op_2!(InvokeInterface),
-            inst::INVOKE_DYNAMIC => op_1!(InvokeDynamic),
+            inst::INVOKE_VIRTUAL => op_1!(CodeI::InvokeVirtual, Code),
+            inst::INVOKE_SPECIAL => op_1!(CodeI::InvokeSpecial, Code),
+            inst::INVOKE_STATIC => op_1!(CodeI::InvokeStatic, Code),
+            inst::INVOKE_INTERFACE => op_2!(CodeI::InvokeInterface, Code),
+            inst::INVOKE_DYNAMIC => op_1!(CodeI::InvokeDynamic, Code),
 
-            inst::NEW => op_1!(New),
-            inst::NEW_PRIMITIVE_ARRAY => op_1!(NewPrimitiveArray),
-            inst::NEW_REF_ARRAY => op_1!(NewRefArray),
+            inst::NEW => op_1!(CodeI::New, Code),
+            inst::NEW_PRIMITIVE_ARRAY => op_1!(CodeI::NewPrimitiveArray, Code),
+            inst::NEW_REF_ARRAY => op_1!(CodeI::NewRefArray, Code),
 
-            inst::ARRAY_LEN => op_0!(ArrayLen),
+            inst::ARRAY_LEN => op_0!(CodeI::ArrayLen, Code),
 
-            inst::THROW => op_0!(Throw),
+            inst::THROW => op_0!(CodeI::Throw, Code),
 
-            inst::CHECK_CAST => op_1!(CheckCast),
-            inst::INSTANCE_OF => op_1!(InstanceOf),
+            inst::CHECK_CAST => op_1!(CodeI::CheckCast, Code),
+            inst::INSTANCE_OF => op_1!(CodeI::InstanceOf, Code),
 
-            inst::ENTER_MONITOR => op_0!(EnterMonitor),
-            inst::EXIT_MONITOR => op_0!(ExitMonitor),
+            inst::ENTER_MONITOR => op_0!(CodeI::EnterMonitor, Code),
+            inst::EXIT_MONITOR => op_0!(CodeI::ExitMonitor, Code),
 
 
             inst::WIDE => {
@@ -520,16 +538,16 @@ impl Instruction {
                 Wide(wide_instruction)*/
             },
 
-            inst::NEW_REF_MULTI_ARRAY => op_2!(NewRefMultiArray),
-            inst::IF_REF_NULL => op_1!(IfRefNull),
-            inst::IF_REF_NON_NULL => op_1!(IfRefNonNull),
-            inst::WIDE_GOTO => op_1!(WideGoto),
-            inst::WIDE_JUMP_SUB => op_1!(WideJumpSub),
+            inst::NEW_REF_MULTI_ARRAY => op_2!(CodeI::NewRefMultiArray, Code),
+            inst::IF_REF_NULL => op_1!(CodeI::IfRefNull, Code),
+            inst::IF_REF_NON_NULL => op_1!(CodeI::IfRefNonNull, Code),
+            inst::WIDE_GOTO => op_1!(CodeI::WideGoto, Code),
+            inst::WIDE_JUMP_SUB => op_1!(CodeI::WideJumpSub, Code),
 
 
-            inst::BREAKPOINT => op_0!(Breakpoint),
-            inst::IMPLEMENTATION_DEFINED_1 => op_0!(ImplementationDefined1),
-            inst::IMPLEMENTATION_DEFINED_2 => op_0!(ImplementationDefined2),
+            inst::BREAKPOINT => op_0!(CodeI::Breakpoint, Code),
+            inst::IMPLEMENTATION_DEFINED_1 => op_0!(CodeI::ImplementationDefined1, Code),
+            inst::IMPLEMENTATION_DEFINED_2 => op_0!(CodeI::ImplementationDefined2, Code),
 
             other => fatal_error!(reports; "unknown instruction `{}`", other),
         }
@@ -549,22 +567,33 @@ impl Instruction {
         &self.ident
     }
 
-    pub fn instruction(&self) -> &InstructionType {
-        &self.instruction
+    pub fn body(&self) -> &InstructionBody {
+        &self.body
     }
 
     pub fn span(&self) -> Span {
         self.span
     }
 
-    pub fn into_instruction(self) -> InstructionType {
-        self.instruction
+    pub fn into_body(self) -> InstructionBody {
+        self.body
     }
 }
 
 #[derive(Clone, Debug)]
-pub enum InstructionType {
-    Class(Expr),
+pub enum InstructionBody {
+    Item(ItemInstruction),
+    Meta(MetaInstruction),
+    Constant(ConstantInstruction),
+    Code(CodeInstruction),
+}
+
+#[derive(Clone, Debug)]
+pub enum ItemInstruction {
+    Class {
+        this_class: Expr,
+        super_class: Expr,
+    },
     Field {
         descriptor: Expr,
         name: Option<Expr>,
@@ -573,11 +602,16 @@ pub enum InstructionType {
         descriptor: Expr,
         name: Option<Expr>,
     },
+}
 
-    Super(Expr),
-    Impl(Expr),
+#[derive(Clone, Debug)]
+pub enum MetaInstruction {
+    Impl(Vec<Expr>),
 
-    Version(Expr),
+    Version {
+        minor: Expr,
+        major: Expr,
+    },
 
     Flags(Vec<Expr>),
     Stack(Expr),
@@ -589,8 +623,13 @@ pub enum InstructionType {
         ty: Expr,
     },
 
-    Attr(Expr, Expr),
+    ConstantValue(Expr),
 
+    Attr(Expr, Expr),
+}
+
+#[derive(Clone, Debug)]
+pub enum ConstantInstruction {
     ClassRef(Expr),
     FieldRef {
         class: Expr,
@@ -624,7 +663,10 @@ pub enum InstructionType {
         name: Expr,
         descriptor: Option<Expr>,
     },
+}
 
+#[derive(Clone, Debug)]
+pub enum CodeInstruction {
     Nop,
 
     ConstRefNull,
@@ -883,7 +925,7 @@ pub enum InstructionType {
     EnterMonitor,
     ExitMonitor,
 
-    Wide(Expr, ),
+    Wide(Expr),
 
     NewRefMultiArray(Expr, Expr),
     IfRefNull(Expr),
@@ -897,28 +939,112 @@ pub enum InstructionType {
     ImplementationDefined2,
 }
 
-impl InstructionType {
-
-    pub fn category(&self) -> InstructionCategory {
-        use self::InstructionType::*;
+impl CodeInstruction {
+    
+    #[inline]
+    pub fn len(&self, prev: usize) -> usize {
+        use self::CodeInstruction::*;
         match *self {
-            Class(..) | Field {..} | Method {..} => InstructionCategory::Item,
-            Super(..) | Impl(..) | Version(..) |
-            Flags(..) | Stack(..) | Locals(..) |
-            Catch {..} | Attr (..) => InstructionCategory::Meta,
-            ClassRef(..) | FieldRef {..} | MethodRef {..} |
-            InterfaceMethodRef {..} | String(..) | Integer(..) |
-            Float(..) | Double(..) | NameAndType(..) |
-            Utf8(..) | MethodHandle {..} | MethodType(..) |
-            DynamicTarget {..} => InstructionCategory::Constant,
-            _ => InstructionCategory::Code,
+
+
+            PushByte(..) => 2,
+            PushShort(..) => 3,
+
+            LoadConstant(..) => 2,
+            WideLoadConstant(..) => 3,
+            WideLoadWideConstant(..) => 3,
+
+
+            LoadInt(..) => 2,
+            LoadLong(..) => 2,
+            LoadFloat(..) => 2,
+            LoadDouble(..) => 2,
+            LoadRef(..) => 2,
+
+
+            StoreInt(..) => 2,
+            StoreLong(..) => 2,
+            StoreFloat(..) => 2,
+            StoreDouble(..) => 2,
+            StoreRef(..) => 2,
+
+            IfIntEq0(..) => 3,
+            IfIntNe0(..) => 3,
+            IfIntLt0(..) => 3,
+            IfIntGe0(..) => 3,
+            IfIntGt0(..) => 3,
+            IfIntLe0(..) => 3,
+
+            IfIntEq(..) => 3,
+            IfIntNe(..) => 3,
+            IfIntLt(..) => 3,
+            IfIntGe(..) => 3,
+            IfIntGt(..) => 3,
+            IfIntLe(..) => 3,
+
+            IfRefEq(..) => 3,
+            IfRefNe(..) => 3,
+
+            Goto(..) => 3,
+            JumpSub(..) => 3,
+            RetSub(..) => 2,
+
+            LookupSwitch {
+                ref default_offset,
+                ref match_table
+            } => {
+                let mut bytes = prev + 1;
+                while bytes % 4 != 0 {
+                    bytes += 1;
+                }
+                bytes += 8;
+                bytes += 8 * match_table.len();
+                bytes - prev
+            },
+
+            TableSwitch {
+                ref default_offset,
+                ref match_range,
+                ref offset_table,
+            } => {
+                let mut bytes = prev + 1;
+                while bytes % 4 != 0 {
+                    bytes += 1;
+                }
+                bytes += 12;
+                bytes += 4 * offset_table.len();
+                bytes - prev
+            },
+
+            GetStaticField(..) => 3,
+            PutStaticField(..) => 3,
+            GetField(..) => 3,
+            PutField(..) => 3,
+
+            InvokeDynamic(..) => 5,
+            InvokeInterface(..) => 5,
+            InvokeSpecial(..) => 3,
+            InvokeStatic(..) => 3,
+            InvokeVirtual(..) => 3,
+
+            New(..) => 3,
+            NewPrimitiveArray(..) => 2,
+            NewRefArray(..) => 3,
+
+            CheckCast(..) => 3,
+            InstanceOf(..) => 3,
+
+            Wide(..) => unimplemented!(), // FIXME
+
+            NewRefMultiArray(..) => 4,
+            IfRefNull(..) => 3,
+            IfRefNonNull(..) => 3,
+            WideGoto(..) => 5,
+            WideJumpSub(..) => 5,
+
+            _ => 1
         }
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum InstructionCategory {
-    Item, Meta, Constant, Code,
 }
 
 #[derive(Clone, Debug)]
@@ -1321,13 +1447,16 @@ impl Parser {
 
         let (label, instruction, mut span) = {
             let maybe_label = merge_reports!(reports, self.consume_ident());
-            let maybe_colon = merge_reports!(reports, self.pop_token("expression"));
-            if maybe_colon.value == ":" {
+            let maybe_colon = self.token_stack.pop();
+            if maybe_colon.is_some() && maybe_colon.as_ref().unwrap().value == ":" {
                 let instruction = merge_reports!(reports, self.consume_ident());
+                let maybe_colon = maybe_colon.unwrap();
                 let span = maybe_label.span().extend_to(instruction.span().end);
                 (Some(maybe_label), instruction, span)
             } else {
-                self.token_stack.push(maybe_colon);
+                if let Some(token) = maybe_colon {
+                    self.token_stack.push(token);
+                }
                 let span = maybe_label.span();
                 (None, maybe_label, span)
             }

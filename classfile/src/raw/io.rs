@@ -358,9 +358,9 @@ fn parse_code<R: Read>(bytes: &mut R, len: u32) -> Result<Vec<Instruction>> {
             code::OPCODE_PUSH_BYTE => PushByte(bytes.read_i8()?),
             code::OPCODE_PUSH_SHORT => PushShort(bytes.read_i16::<BigEndian>()?),
 
-            code::OPCODE_LOAD_CONSTANT => LoadConstant(bytes.read_constant_index()?),
-            code::OPCODE_WIDE_LOAD_CONSTANT => WideLoadConstant(bytes.read_wide_constant_index()?),
-            code::OPCODE_WIDE_LOAD_WIDE_CONSTANT => WideLoadWideConstant(bytes.read_wide_constant_index()?),
+            code::OPCODE_LOAD_CONSTANT => LoadConstant(bytes.read_half_constant_index()?),
+            code::OPCODE_WIDE_LOAD_CONSTANT => WideLoadConstant(bytes.read_constant_index()?),
+            code::OPCODE_WIDE_LOAD_WIDE_CONSTANT => WideLoadWideConstant(bytes.read_constant_index()?),
 
 
             code::OPCODE_LOAD_INT => LoadInt(bytes.read_var_index()?),
@@ -902,9 +902,9 @@ fn emit_code<W: Write>(instructions: &Vec<Instruction>, out: &mut W) -> Result<(
             PushByte(byte) => out.write_i8(byte)?,
             PushShort(short) => out.write_i16::<BigEndian>(short)?,
             
-            LoadConstant(ref index) => out.write_constant_index(index)?,
-            WideLoadConstant(ref index) => out.write_wide_constant_index(index)?,
-            WideLoadWideConstant(ref index) => out.write_wide_constant_index(index)?,
+            LoadConstant(ref index) => out.write_half_constant_index(index)?,
+            WideLoadConstant(ref index) => out.write_constant_index(index)?,
+            WideLoadWideConstant(ref index) => out.write_constant_index(index)?,
             
             LoadInt(ref index) => out.write_var_index(index)?,
             LoadLong(ref index) => out.write_var_index(index)?,

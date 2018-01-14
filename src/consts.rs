@@ -16,6 +16,8 @@ pub mod instructions {
     pub const LOCALS: &'static str = "locals";
     pub const CATCH: &'static str = "catch";
 
+    pub const CONST_VALUE: &'static str = "const_val";
+
     pub const ATTR: &'static str = "attr";
 
     // constants
@@ -312,4 +314,35 @@ pub mod special {
     pub const HANDLE_KIND_INVOKE_SPECIAL: &'static str = "invokespecial";
     pub const HANDLE_KIND_NEW_INVOKE_SPECIAL: &'static str = "new_invokespecial";
     pub const HANDLE_KIND_INVOKE_INTERFACE: &'static str = "invokeinterface";
+
+    pub const ARR_BOOLEAN: &'static str = "boolean";
+    pub const ARR_CHAR: &'static str = "char";
+    pub const ARR_FLOAT: &'static str = "float";
+    pub const ARR_DOUBLE: &'static str = "double";
+    pub const ARR_BYTE: &'static str = "byte";
+    pub const ARR_SHORT: &'static str = "short";
+    pub const ARR_INT: &'static str = "int";
+    pub const ARR_LONG: &'static str = "long";
+}
+
+pub mod flags {
+
+    pub const PUBLIC: &'static str = "public";
+    pub const PROTECTED: &'static str = "protected";
+    pub const PRIVATE: &'static str = "private";
+    pub const FINAL: &'static str = "final";
+    pub const SUPER: &'static str = "super";
+    pub const INTERFACE: &'static str = "interface";
+    pub const ABSTRACT: &'static str = "abstract";
+    pub const SYNTHETIC: &'static str = "synthetic";
+    pub const ANNOTATION: &'static str = "annotation";
+    pub const ENUM: &'static str = "enum";
+    pub const STATIC: &'static str = "static";
+    pub const VOLATILE: &'static str = "volatile";
+    pub const TRANSIENT: &'static str = "transient";
+    pub const SYNCHRONIZED: &'static str = "synchronized";
+    pub const BRIDGE: &'static str = "bridge";
+    pub const VARARGS: &'static str = "varargs";
+    pub const NATIVE: &'static str = "native";
+    pub const STRICT: &'static str = "strictfp";
 }
