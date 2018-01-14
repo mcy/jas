@@ -9,7 +9,6 @@ pub mod ast;
 pub mod consts;
 pub mod lexer;
 pub mod codegen;
-pub mod trans;
 
 use classfile::raw::io;
 
@@ -27,10 +26,10 @@ fn main() {
     let ast = parser.consume_all();
     println!("{:?}", ast);
 
-    let mut sections = trans::ClassSection::from_instructions(ast.unwrap()).unwrap();
+    let mut sections = codegen::ClassSection::from_instructions(ast.unwrap()).unwrap();
 
     for (i, section) in sections.into_iter().enumerate() {
-        let mut partial = trans::PartialClass::new();
+        let mut partial = codegen::PartialClass::new();
         let x = partial.process_section(section);
         println!("{:?}", partial);
         println!("{:?}", x);

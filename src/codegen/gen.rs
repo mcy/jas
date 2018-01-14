@@ -1,6 +1,7 @@
 use ast::*;
 use consts;
 use consts::special;
+use codegen::*;
 use reporting::*;
 
 use classfile::raw;
@@ -265,7 +266,7 @@ impl PartialClass {
 
         fn handle_item_ref(this: &mut PartialClass, class: Expr, name: Expr, descriptor: Option<Expr>) -> Reported<(ConstantIndex, ConstantIndex)> {
             let mut reports = Reported::new();
-            
+
             let class_index = merge_reports!(reports, this.eval_expr_into_index(class, Some(|this: &mut PartialClass, s| {
                     let str = this.push_expanded_constant(raw::Constant::Utf8(s));
                     this.push_expanded_constant(raw::Constant::Class(str))
@@ -764,7 +765,7 @@ impl PartialClass {
         for code in method.code.iter() {
             code_len += code.body.len(code_len);
         }
-        
+
         let mut code_array = Vec::new();
 
         // this part is the very worst. it's so horrible, I wrote a macro
@@ -1020,51 +1021,51 @@ impl PartialClass {
                     PutStaticField,
                     GetField,
                     PutField,
-                
+
                     InvokeDynamic,
                     InvokeSpecial,
                     InvokeStatic,
                     InvokeVirtual,
-                
+
                 [class_const]
-                
+
                     New,
                     NewRefArray,
                     CheckCast,
                     InstanceOf,
-                
+
                 [var]
-                
+
                     LoadInt,
                     LoadLong,
                     LoadFloat,
                     LoadDouble,
                     LoadRef,
-              
+
                     StoreInt,
                     StoreLong,
                     StoreFloat,
                     StoreDouble,
                     StoreRef,
-                    
+
                     RetSub,
-              
+
                 [jump]
-                
+
                     IfIntEq0,
                     IfIntNe0,
                     IfIntLt0,
                     IfIntGe0,
                     IfIntGt0,
                     IfIntLe0,
-                    
+
                     IfIntEq,
                     IfIntNe,
                     IfIntLt,
                     IfIntGe,
                     IfIntGt,
                     IfIntLe,
-                    
+
                     IfRefEq,
                     IfRefNe,
 
@@ -1073,7 +1074,7 @@ impl PartialClass {
 
                     IfRefNull,
                     IfRefNonNull,
-                    
+
                 [other]
                     CodeInstruction::PushByte(expr) => {
                         let byte = merge_reports!(reports, self.eval_expr_into_int(expr, "i8", self::into_i8));
@@ -1337,210 +1338,12 @@ enum LabelKind {
     Code(u32),
 }
 
-// represents a pile of instructions
-// contiguously making up a class
-pub struct ClassSection {
-    label: Option<Ident>,
-    ident: Ident,
-    span: Span,
-    this_class: Expr,
-    super_class: Expr,
-    top_level: Vec<MetaSection>,
-    constants: Vec<ConstantSection>,
-    fields: Vec<FieldSection>,
-    methods: Vec<MethodSection>,
-}
-
-impl ClassSection {
-
-    pub fn from_instructions(ast: Vec<Instruction>) -> Reported<Vec<ClassSection>> {
-
-        let mut stack = ast.into_iter().rev().collect::<Vec<_>>();
-
-        let mut reports = Reported::new();
-        let mut result = Vec::new();
-
-        while !stack.is_empty() {
-            result.push(merge_reports!(reports, ClassSection::consume_class(&mut stack)));
-        }
-
-        reports.complete(result)
-    }
-
-    fn consume_class(stack: &mut Vec<Instruction>) -> Reported<ClassSection> {
-
-        let mut reports = Reported::new();
-
-        // first, get the class instruction, and error
-        // at anything else
-        let (label, ident, span, this_class, super_class) = loop {
-            let next = stack.pop().unwrap();
-            let Instruction { label, ident, body, span } = next;
-            if let InstructionBody::Item(ItemInstruction::Class { this_class, super_class }) = body {
-                break (label, ident, span, this_class, super_class);
-            } else {
-                reports.report(report_error!("found `{}` before `class` instruction", ident.name; ident.span));
-            }
-        };
-
-        let mut top_level = Vec::new();
-        let mut constants = Vec::new();
-
-        let mut methods = Vec::new();
-        let mut fields = Vec::new();
-
-        while let Some(next) = stack.pop() {
-            let Instruction { label, ident, body, span } = next;
-            match body.clone() { // FIXME: get rid of this clone
-                InstructionBody::Item(item) => match item {
-                    ItemInstruction::Field { descriptor, name } => {
-                        let mut meta = Vec::new();
-                        while let Some(op) = stack.pop() {
-                            let Instruction { label, ident, body, span } = op;
-                            match body {
-                                InstructionBody::Item(..) => {
-                                    stack.push(Instruction { label, ident, body, span });
-                                    break
-                                },
-                                InstructionBody::Meta(i) => meta.push(MetaSection { label, ident, span, body: i }),
-                                InstructionBody::Constant(i) => constants.push(ConstantSection { label, ident, span, body: i }),
-                                InstructionBody::Code(..) => reports.report(report_error!(
-                                    "unexpected code instruction `{}` in field", ident.name; ident.span
-                                ))
-                            }
-                        }
-                        fields.push(FieldSection {
-                            label, ident, span,
-                            name, descriptor,
-                            meta,
-                        });
-                    }
-                    ItemInstruction::Method { descriptor, name, } => {
-                        let mut meta = Vec::new();
-                        let mut code = Vec::new();
-                        while let Some(op) = stack.pop() {
-                            let Instruction { label, ident, body, span } = op;
-                            match body {
-                                InstructionBody::Item(..) => {
-                                    stack.push(Instruction { label, ident, body, span });
-                                    break
-                                },
-                                InstructionBody::Meta(i) => meta.push(MetaSection { label, ident, span, body: i }),
-                                InstructionBody::Constant(i) => constants.push(ConstantSection { label, ident, span, body: i }),
-                                InstructionBody::Code(i) => code.push(CodeSection { label, ident, span, body: i }),
-                            }
-                        }
-                        methods.push(MethodSection {
-                            label, ident, span,
-                            name, descriptor,
-                            meta, code,
-                        });
-                    }
-                    _ => {
-                        stack.push(Instruction { label, ident, body, span });
-                        break
-                    }
-                }
-                InstructionBody::Meta(i) => top_level.push(MetaSection { label, ident, span, body: i }),
-                InstructionBody::Constant(i) => constants.push(ConstantSection { label, ident, span, body: i }),
-                InstructionBody::Code(..) => reports.report(report_error!(
-                    "unexpected code instruction `{}`", ident.name; ident.span
-                ))
-            }
-        }
-
-        reports.complete(ClassSection { label, ident, span, this_class, super_class, top_level, constants, fields, methods })
-    }
-}
-
-pub struct MetaSection {
-    label: Option<Ident>,
-    ident: Ident,
-    span: Span,
-    body: MetaInstruction,
-}
-
-pub struct ConstantSection {
-    label: Option<Ident>,
-    ident: Ident,
-    span: Span,
-    body: ConstantInstruction,
-}
-
-pub struct FieldSection {
-    label: Option<Ident>,
-    ident: Ident,
-    span: Span,
-    name: Option<Expr>,
-    descriptor: Expr,
-    meta: Vec<MetaSection>,
-}
-
-pub struct MethodSection {
-    label: Option<Ident>,
-    ident: Ident,
-    span: Span,
-    name: Option<Expr>,
-    descriptor: Expr,
-    meta: Vec<MetaSection>,
-    code: Vec<CodeSection>,
-}
-
-pub struct CodeSection {
-    label: Option<Ident>,
-    ident: Ident,
-    span: Span,
-    body: CodeInstruction,
-}
-
 #[derive(Clone, Debug)]
 pub enum Value {
     Int(i64, Span),
     Float(f64, Span),
     Str(String, Span),
 }
-
-fn into_i8(val: i64) -> Option<i8> {
-    if val >= (i8::MIN as i64) && val <= (i8::MAX as i64) {
-        Some(val as i8)
-    } else {
-        None
-    }
-}
-
-fn into_i16(val: i64) -> Option<i16> {
-    if val >= (i16::MIN as i64) && val <= (i16::MAX as i64) {
-        Some(val as i16)
-    } else {
-        None
-    }
-}
-
-fn into_u8(val: i64) -> Option<u8> {
-    if val >= (u8::MIN as i64) && val <= (u8::MAX as i64) {
-        Some(val as u8)
-    } else {
-        None
-    }
-}
-
-fn into_u16(val: i64) -> Option<u16> {
-    if val >= (u16::MIN as i64) && val <= (u16::MAX as i64) {
-        Some(val as u16)
-    } else {
-        None
-    }
-}
-
-fn into_u32(val: i64) -> Option<u32> {
-    if val >= (u32::MIN as i64) && val <= (u32::MAX as i64) {
-        Some(val as u32)
-    } else {
-        None
-    }
-}
-
-const NO_INDEX_FN: Option<fn(&mut PartialClass, String) -> ConstantIndex> = None;
 
 
 
