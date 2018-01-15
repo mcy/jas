@@ -2,7 +2,9 @@ use ast::*;
 use consts;
 use consts::special;
 use codegen::*;
+use phase::Phase;
 use reporting::*;
+use source_file::*;
 
 use classfile::raw;
 use classfile::indexing::*;
@@ -15,7 +17,7 @@ use std::mem;
 use std::{u8, u16, u32, u64, i8, i16, i32, f32};
 
 #[derive(Debug)]
-pub struct PartialClass {
+pub struct Generator {
 
     minor_major_version: Option<(u16, u16)>,
 
@@ -37,10 +39,10 @@ pub struct PartialClass {
     attributes: Vec<raw::Attribute>,
 }
 
-impl PartialClass {
+impl Generator {
 
-    pub fn new() -> PartialClass {
-        PartialClass {
+    pub fn new() -> Generator {
+        Generator {
             minor_major_version: None,
 
             labels: HashMap::new(),
@@ -66,44 +68,70 @@ impl PartialClass {
 
         let mut reports = Reported::new();
 
-        merge_reports!(reports, self.expand_labels(&section));
+        report_try!(reports; self.expand_labels(&section));
 
-        merge_reports!(reports, self.expand_this_and_super(section.this_class, section.super_class));
+        report_try!(reports; self.expand_this_and_super(section.this_class, section.super_class));
 
-        merge_reports!(reports, self.expand_declared_constants(section.constants));
+        report_try!(reports; self.expand_declared_constants(section.constants));
 
-        merge_reports!(reports, self.expand_top_level(section.top_level));
+        report_try!(reports; self.expand_top_level(section.top_level));
 
         for field in section.fields {
-            let field = merge_reports!(reports, self.expand_field(field));
+            let field = report_try!(reports; self.expand_field(field));
             self.fields.push(field);
         }
 
         for method in section.methods {
-            let method = merge_reports!(reports, self.expand_method(method));
+            let method = report_try!(reports; self.expand_method(method));
             self.methods.push(method);
         }
         reports.complete(())
     }
 
-    pub fn assemble_class(mut self) -> raw::Class {
-        raw::Class {
-            minor_version: self.minor_major_version.unwrap().0,
-            major_version: self.minor_major_version.unwrap().1,
-            constant_pool: {
-                let mut constants = Vec::new();
-                constants.append(&mut self.declared_constants);
-                constants.append(&mut self.expanded_constants);
-                constants
-            },
-            flags: self.flags.unwrap(),
-            this_class: self.this_class.unwrap(),
-            super_class: self.super_class.unwrap(),
-            interfaces: self.interfaces,
-            fields: self.fields,
-            methods: self.methods,
-            attributes: self.attributes,
+    fn get_constant(&self, index: ConstantIndex) -> Option<&raw::Constant> {
+        let index = index.0 as usize;
+        if index <= self.declared_count {
+            Some(&self.declared_constants[index - 1])
+        } else if index - self.declared_count <= self.expanded_constants.len() {
+            Some(&self.expanded_constants[index - self.declared_count - 1])
+        } else {
+            None
         }
+    }
+
+    pub fn file_name(&mut self) -> Option<Vec<String>> {
+        if let Some(&raw::Constant::Class(ref class)) = self.get_constant(self.this_class.as_ref().unwrap().clone()) {
+            if let Some(&raw::Constant::Utf8(ref str)) = self.get_constant(class.clone()) {
+                Some(format!("{}.class", str).split("/").map(Into::into).collect())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn assemble_class(mut self) -> (Option<Vec<String>>, raw::Class) {
+        (
+            self.file_name(),
+            raw::Class {
+                minor_version: self.minor_major_version.unwrap().0,
+                major_version: self.minor_major_version.unwrap().1,
+                constant_pool: {
+                    let mut constants = Vec::new();
+                    constants.append(&mut self.declared_constants);
+                    constants.append(&mut self.expanded_constants);
+                    constants
+                },
+                flags: self.flags.unwrap(),
+                this_class: self.this_class.unwrap(),
+                super_class: self.super_class.unwrap(),
+                interfaces: self.interfaces,
+                fields: self.fields,
+                methods: self.methods,
+                attributes: self.attributes,
+            }
+        )
     }
 
     fn push_declared_constant(&mut self, constant: raw::Constant) {
@@ -144,7 +172,7 @@ impl PartialClass {
 
         if let Some(ref label) = section.label {
             if self.labels.contains_key(&label.name) {
-                reports.report(report_error!("duplicate label"; label.span));
+                report_error!(reports; "duplicate label"; label.span);
             } else {
                 self.labels.insert(label.name.clone(), LabelKind::Item);
             }
@@ -153,7 +181,7 @@ impl PartialClass {
         for meta in section.top_level.iter() {
             if let Some(ref label) = meta.label {
                 if self.labels.contains_key(&label.name) {
-                    reports.report(report_error!("duplicate label"; label.span));
+                    report_error!(reports; "duplicate label"; label.span);
                 } else {
                     self.labels.insert(label.name.clone(), LabelKind::Meta);
                 }
@@ -164,7 +192,7 @@ impl PartialClass {
         for constant in section.constants.iter() {
             if let Some(ref label) = constant.label {
                 if self.labels.contains_key(&label.name) {
-                    reports.report(report_error!("duplicate label"; label.span));
+                    report_error!(reports; "duplicate label"; label.span);
                 } else {
                     self.labels.insert(label.name.clone(), LabelKind::Constant(index + 1));
                 }
@@ -179,7 +207,7 @@ impl PartialClass {
         for field in section.fields.iter() {
             if let Some(ref label) = field.label {
                 if self.labels.contains_key(&label.name) {
-                    reports.report(report_error!("duplicate label"; label.span));
+                    report_error!(reports; "duplicate label"; label.span);
                 } else {
                     self.labels.insert(label.name.clone(), LabelKind::Item);
                 }
@@ -187,7 +215,7 @@ impl PartialClass {
             for meta in field.meta.iter() {
                 if let Some(ref label) = meta.label {
                     if self.labels.contains_key(&label.name) {
-                        reports.report(report_error!("duplicate label"; label.span));
+                        report_error!(reports; "duplicate label"; label.span);
                     } else {
                         self.labels.insert(label.name.clone(), LabelKind::Meta);
                     }
@@ -198,7 +226,7 @@ impl PartialClass {
         for method in section.methods.iter() {
             if let Some(ref label) = method.label {
                 if self.labels.contains_key(&label.name) {
-                    reports.report(report_error!("duplicate label"; label.span));
+                    report_error!(reports; "duplicate label"; label.span);
                 } else {
                     self.labels.insert(label.name.clone(), LabelKind::Item);
                 }
@@ -206,7 +234,7 @@ impl PartialClass {
             for meta in method.meta.iter() {
                 if let Some(ref label) = meta.label {
                     if self.labels.contains_key(&label.name) {
-                        reports.report(report_error!("duplicate label"; label.span));
+                        report_error!(reports; "duplicate label"; label.span);
                     } else {
                         self.labels.insert(label.name.clone(), LabelKind::Meta);
                     }
@@ -215,7 +243,7 @@ impl PartialClass {
             for code in method.code.iter() {
                 if let Some(ref label) = code.label {
                     if self.labels.contains_key(&label.name) {
-                        reports.report(report_error!("duplicate label"; label.span));
+                        report_error!(reports; "duplicate label"; label.span);
                     } else {
                         self.labels.insert(label.name.clone(), LabelKind::Code(0)); // FIXME
                     }
@@ -232,11 +260,11 @@ impl PartialClass {
 
         let mut reports = Reported::new();
 
-        let this_index = merge_reports!(reports, self.eval_expr_into_index(this_class.clone(), Some(|this: &mut PartialClass, s| {
+        let this_index = report_try!(reports; self.eval_expr_into_index(this_class.clone(), Some(|this: &mut Generator, s| {
             let str = this.push_expanded_constant(raw::Constant::Utf8(s));
             this.push_expanded_constant(raw::Constant::Class(str))
         })));
-        let super_index = merge_reports!(reports, self.eval_expr_into_index(super_class.clone(), Some(|this: &mut PartialClass, s| {
+        let super_index = report_try!(reports; self.eval_expr_into_index(super_class.clone(), Some(|this: &mut Generator, s| {
             let str = this.push_expanded_constant(raw::Constant::Utf8(s));
             this.push_expanded_constant(raw::Constant::Class(str))
         })));
@@ -253,7 +281,7 @@ impl PartialClass {
         let mut reports = Reported::new();
 
         for constant in constants.into_iter() {
-            let constant = merge_reports!(reports, self.expand_constant(constant));
+            let constant = report_try!(reports; self.expand_constant(constant));
             self.push_declared_constant(constant);
         }
 
@@ -264,23 +292,23 @@ impl PartialClass {
 
         let mut reports = Reported::new();
 
-        fn handle_item_ref(this: &mut PartialClass, class: Expr, name: Expr, descriptor: Option<Expr>) -> Reported<(ConstantIndex, ConstantIndex)> {
+        fn handle_item_ref(this: &mut Generator, class: Expr, name: Expr, descriptor: Option<Expr>) -> Reported<(ConstantIndex, ConstantIndex)> {
             let mut reports = Reported::new();
 
-            let class_index = merge_reports!(reports, this.eval_expr_into_index(class, Some(|this: &mut PartialClass, s| {
+            let class_index = report_try!(reports; this.eval_expr_into_index(class, Some(|this: &mut Generator, s| {
                     let str = this.push_expanded_constant(raw::Constant::Utf8(s));
                     this.push_expanded_constant(raw::Constant::Class(str))
                 })));
             let name_and_type = if let Some(descriptor) = descriptor {
-                let name_index = merge_reports!(reports,
-                        this.eval_expr_into_index(name, Some(PartialClass::push_string_constant)));
-                let descriptor_index = merge_reports!(reports,
-                        this.eval_expr_into_index(descriptor, Some(PartialClass::push_string_constant)));
+                let name_index = report_try!(reports;
+                        this.eval_expr_into_index(name, Some(Generator::push_string_constant)));
+                let descriptor_index = report_try!(reports;
+                        this.eval_expr_into_index(descriptor, Some(Generator::push_string_constant)));
                 this.push_expanded_constant(raw::Constant::Signature {
                     name: name_index, descriptor: descriptor_index,
                 })
             } else {
-                merge_reports!(reports, this.eval_expr_into_index(name, self::NO_INDEX_FN))
+                report_try!(reports; this.eval_expr_into_index(name, self::NO_INDEX_FN))
             };
 
             reports.complete((class_index, name_and_type))
@@ -290,29 +318,29 @@ impl PartialClass {
 
         let constant = match body {
             ConstantInstruction::ClassRef(class) => {
-                let index = merge_reports!(reports,
-                    self.eval_expr_into_index(class, Some(PartialClass::push_string_constant)));
+                let index = report_try!(reports;
+                    self.eval_expr_into_index(class, Some(Generator::push_string_constant)));
                 raw::Constant::Class(index)
             },
             ConstantInstruction::FieldRef { class, name, descriptor } => {
-                let (class_index, name_and_type) = merge_reports!(reports, handle_item_ref(self, class, name, descriptor));
+                let (class_index, name_and_type) = report_try!(reports; handle_item_ref(self, class, name, descriptor));
                 raw::Constant::FieldRef { class: class_index, signature: name_and_type }
             },
             ConstantInstruction::MethodRef { class, name, descriptor } => {
-                let (class_index, name_and_type) = merge_reports!(reports, handle_item_ref(self, class, name, descriptor));
+                let (class_index, name_and_type) = report_try!(reports; handle_item_ref(self, class, name, descriptor));
                 raw::Constant::MethodRef { class: class_index, signature: name_and_type }
             },
             ConstantInstruction::InterfaceMethodRef { class, name, descriptor } => {
-                let (class_index, name_and_type) = merge_reports!(reports, handle_item_ref(self, class, name, descriptor));
+                let (class_index, name_and_type) = report_try!(reports; handle_item_ref(self, class, name, descriptor));
                 raw::Constant::InterfaceMethodRef { class: class_index, signature: name_and_type }
             },
             ConstantInstruction::String(str) => {
-                let index = merge_reports!(reports,
-                    self.eval_expr_into_index(str, Some(PartialClass::push_string_constant)));
+                let index = report_try!(reports;
+                    self.eval_expr_into_index(str, Some(Generator::push_string_constant)));
                 raw::Constant::String(index)
             },
             ConstantInstruction::Integer(expr) => {
-                match merge_reports!(reports, self.eval_expr(expr)) {
+                match report_try!(reports; self.eval_expr(expr)) {
                     Value::Int(val, span) => {
                         if val >= (i32::MIN as i64) && val <= (i32::MAX as i64) {
                             raw::Constant::Integer(val as i32)
@@ -329,7 +357,7 @@ impl PartialClass {
                 }
             },
             ConstantInstruction::Float(expr) => {
-                match merge_reports!(reports, self.eval_expr(expr)) {
+                match report_try!(reports; self.eval_expr(expr)) {
                     Value::Int(_, span) => {
                         fatal_error!(reports; "expected float, found string"; span)
                     },
@@ -343,7 +371,7 @@ impl PartialClass {
                 }
             },
             ConstantInstruction::Long(expr) => {
-                match merge_reports!(reports, self.eval_expr(expr)) {
+                match report_try!(reports; self.eval_expr(expr)) {
                     Value::Int(val, _) => {
                         raw::Constant::Long(val)
                     },
@@ -356,7 +384,7 @@ impl PartialClass {
                 }
             },
             ConstantInstruction::Double(expr) => {
-                match merge_reports!(reports, self.eval_expr(expr)) {
+                match report_try!(reports; self.eval_expr(expr)) {
                     Value::Int(_, span) => {
                         fatal_error!(reports; "expected float, found string"; span)
                     },
@@ -370,16 +398,16 @@ impl PartialClass {
                 }
             },
             ConstantInstruction::NameAndType(name, descriptor) => {
-                let name_index = merge_reports!(reports,
-                    self.eval_expr_into_index(name, Some(PartialClass::push_string_constant)));
-                let descriptor_index = merge_reports!(reports,
-                    self.eval_expr_into_index(descriptor, Some(PartialClass::push_string_constant)));
+                let name_index = report_try!(reports;
+                    self.eval_expr_into_index(name, Some(Generator::push_string_constant)));
+                let descriptor_index = report_try!(reports;
+                    self.eval_expr_into_index(descriptor, Some(Generator::push_string_constant)));
                 raw::Constant::Signature {
                     name: name_index, descriptor: descriptor_index,
                 }
             }
             ConstantInstruction::Utf8(expr) => {
-                match merge_reports!(reports, self.eval_expr(expr)) {
+                match report_try!(reports; self.eval_expr(expr)) {
                     Value::Int(val, _) => {
                         fatal_error!(reports; "expected string, found integer"; span)
                     },
@@ -408,14 +436,14 @@ impl PartialClass {
                     }
                     other => fatal_error!(reports; "expected ident"; other.span())
                 };
-                let referent_index = merge_reports!(reports, self.eval_expr_into_index(referent, self::NO_INDEX_FN));
+                let referent_index = report_try!(reports; self.eval_expr_into_index(referent, self::NO_INDEX_FN));
                 raw::Constant::MethodHandle {
                     kind, referent: referent_index,
                 }
             },
             ConstantInstruction::MethodType(expr) => {
-                let index = merge_reports!(reports,
-                    self.eval_expr_into_index(expr, Some(PartialClass::push_string_constant)));
+                let index = report_try!(reports;
+                    self.eval_expr_into_index(expr, Some(Generator::push_string_constant)));
                 raw::Constant::MethodType(index)
             },
             ConstantInstruction::DynamicTarget { .. } => {
@@ -434,7 +462,7 @@ impl PartialClass {
             let MetaSection { label, ident, span, body } = meta;
             match body {
                 MetaInstruction::Impl(exprs) => for expr in exprs {
-                    let index = merge_reports!(reports, self.eval_expr_into_index(expr, Some(|this: &mut PartialClass, s| {
+                    let index = report_try!(reports; self.eval_expr_into_index(expr, Some(|this: &mut Generator, s| {
                         let str = this.push_expanded_constant(raw::Constant::Utf8(s));
                         this.push_expanded_constant(raw::Constant::Class(str))
                     })));
@@ -442,17 +470,17 @@ impl PartialClass {
                 },
                 MetaInstruction::Version { minor, major } => {
                     if self.minor_major_version.is_some() {
-                        reports.report(report_error!("duplicate `version` instruction"; span));
+                        report_error!(reports; "duplicate `version` instruction"; span);
                     } else {
                         // FIXME: use something reasonable
-                        let minor_val = merge_reports!(reports, self.eval_expr_into_index(minor, self::NO_INDEX_FN));
-                        let major_val = merge_reports!(reports, self.eval_expr_into_index(major, self::NO_INDEX_FN));
+                        let minor_val = report_try!(reports; self.eval_expr_into_index(minor, self::NO_INDEX_FN));
+                        let major_val = report_try!(reports; self.eval_expr_into_index(major, self::NO_INDEX_FN));
                         self.minor_major_version = Some((minor_val.0, major_val.0));
                     }
                 },
                 MetaInstruction::Flags(exprs) => {
                     if self.flags.is_some() {
-                        reports.report(report_error!("duplicate `flags` instruction"; span));
+                        report_error!(reports; "duplicate `flags` instruction"; span);
                     } else {
                         let mut flag = flags::class::Flags::new();
                         for expr in exprs {
@@ -467,12 +495,12 @@ impl PartialClass {
                                     consts::flags::ANNOTATION => flag.set_annotation(true),
                                     consts::flags::ENUM => flag.set_enum(true),
                                     other => {
-                                        reports.report(report_error!("`{}` is not a class flag", other; ident.span));
+                                        report_error!(reports; "`{}` is not a class flag", other; ident.span);
                                         &mut flag // FIXME: this is to make this typecheck
                                     },
                                 },
                                 other => {
-                                    reports.report(report_error!("expected ident"; other.span()));
+                                    report_error!(reports; "expected ident"; other.span());
                                     &mut flag // FIXME: this is to make this typecheck
                                 }
                             };
@@ -481,20 +509,20 @@ impl PartialClass {
                     }
                 },
                 MetaInstruction::Stack(..) => {
-                    reports.report(report_error!("`stack` may only appear after a `method` instruction"; span));
+                    report_error!(reports; "`stack` may only appear after a `method` instruction"; span);
                 },
                 MetaInstruction::Locals(..) => {
-                    reports.report(report_error!("`locals` may only appear after a `method` instruction"; span));
+                    report_error!(reports; "`locals` may only appear after a `method` instruction"; span);
                 },
                 MetaInstruction::Catch {..} => {
-                    reports.report(report_error!("`catch` may only appear after a `method` instruction"; span));
+                    report_error!(reports; "`catch` may only appear after a `method` instruction"; span);
                 },
                 MetaInstruction::ConstantValue(..) => {
-                    reports.report(report_error!("`const_val` may only appear after a `field` instruction"; span));
+                    report_error!(reports; "`const_val` may only appear after a `field` instruction"; span);
                 },
                 MetaInstruction::Attr(name, data) => {
                     // fixme: care about what "index" points to
-                    let name_index = merge_reports!(reports, self.eval_expr_into_index(name, Some(PartialClass::push_string_constant)));
+                    let name_index = report_try!(reports; self.eval_expr_into_index(name, Some(Generator::push_string_constant)));
                     match data {
                         Expr::Str(str) => {
                             let span = str.span;
@@ -505,10 +533,10 @@ impl PartialClass {
                                 };
                                 self.attributes.push(attribute);
                             } else {
-                                reports.report(report_error!("expected base64 string"; span));
+                                report_error!(reports; "expected base64 string"; span);
                             }
                         },
-                        _ => reports.report(report_error!("expected base64 string"; data.span())),
+                        _ => report_error!(reports; "expected base64 string"; data.span()),
                     }
                 },
             }
@@ -530,14 +558,14 @@ impl PartialClass {
                 }
             } else {
                 if let Some(name) = field.name {
-                    merge_reports!(reports, self.eval_expr_into_index(name, Some(PartialClass::push_string_constant)))
+                    report_try!(reports; self.eval_expr_into_index(name, Some(Generator::push_string_constant)))
                 } else {
                     fatal_error!(reports; "`field` requires either a label or a second argument"; field.ident.span)
                 }
             }
         };
 
-        let descriptor = merge_reports!(reports, self.eval_expr_into_index(field.descriptor, Some(PartialClass::push_string_constant)));
+        let descriptor = report_try!(reports; self.eval_expr_into_index(field.descriptor, Some(Generator::push_string_constant)));
 
         let mut flags = None;
         let mut attrs = Vec::new();
@@ -546,14 +574,14 @@ impl PartialClass {
             let MetaSection { label, ident, span, body } = meta;
             match body {
                 MetaInstruction::Impl(..) => {
-                    reports.report(report_error!("`impl` may only appear after a `class` instruction"; span));
+                    report_error!(reports; "`impl` may only appear after a `class` instruction"; span);
                 },
                 MetaInstruction::Version { .. } => {
-                    reports.report(report_error!("`version` may only appear after a `class` instruction"; span));
+                    report_error!(reports; "`version` may only appear after a `class` instruction"; span);
                 },
                 MetaInstruction::Flags(exprs) => {
                     if flags.is_some() {
-                        reports.report(report_error!("duplicate `flags` instruction"; span));
+                        report_error!(reports; "duplicate `flags` instruction"; span);
                     } else {
                         let mut flag = flags::field::Flags::new();
                         for expr in exprs {
@@ -569,12 +597,12 @@ impl PartialClass {
                                     consts::flags::SYNTHETIC => flag.set_synthetic(true),
                                     consts::flags::ENUM => flag.set_enum(true),
                                     other => {
-                                        reports.report(report_error!("`{}` is not a field flag", other; ident.span));
+                                        report_error!(reports; "`{}` is not a field flag", other; ident.span);
                                         &mut flag // FIXME: this is to make this typecheck
                                     },
                                 },
                                 other => {
-                                    reports.report(report_error!("expected ident"; other.span()));
+                                    report_error!(reports; "expected ident"; other.span());
                                     &mut flag // FIXME: this is to make this typecheck
                                 }
                             };
@@ -583,22 +611,22 @@ impl PartialClass {
                     }
                 },
                 MetaInstruction::Stack(..) => {
-                    reports.report(report_error!("`stack` may only appear after a `method` instruction"; span));
+                    report_error!(reports; "`stack` may only appear after a `method` instruction"; span);
                 },
                 MetaInstruction::Locals(..) => {
-                    reports.report(report_error!("`locals` may only appear after a `method` instruction"; span));
+                    report_error!(reports; "`locals` may only appear after a `method` instruction"; span);
                 },
                 MetaInstruction::Catch {..} => {
-                    reports.report(report_error!("`catch` may only appear after a `method` instruction"; span));
+                    report_error!(reports; "`catch` may only appear after a `method` instruction"; span);
                 },
                 MetaInstruction::ConstantValue(expr) => {
-                    let index = merge_reports!(reports, self.eval_expr_into_index(expr, self::NO_INDEX_FN));
+                    let index = report_try!(reports; self.eval_expr_into_index(expr, self::NO_INDEX_FN));
                     let name = self.push_string_constant(flags::attribute::ATTR_CONSTANT_VALUE.into());
                     attrs.push(raw::Attribute { name, info: raw::AttributeInfo::ConstantValue(index)})
                 },
                 MetaInstruction::Attr(name, data) => {
                     // fixme: care about what "index" points to
-                    let name_index = merge_reports!(reports, self.eval_expr_into_index(name, Some(PartialClass::push_string_constant)));
+                    let name_index = report_try!(reports; self.eval_expr_into_index(name, Some(Generator::push_string_constant)));
                     match data {
                         Expr::Str(str) => {
                             let span = str.span;
@@ -609,10 +637,10 @@ impl PartialClass {
                                 };
                                 self.attributes.push(attribute);
                             } else {
-                                reports.report(report_error!("expected base64 string"; span));
+                                report_error!(reports; "expected base64 string"; span);
                             }
                         },
-                        _ => reports.report(report_error!("expected base64 string"; data.span())),
+                        _ => report_error!(reports; "expected base64 string"; data.span()),
                     }
                 },
             }
@@ -642,14 +670,14 @@ impl PartialClass {
                 }
             } else {
                 if let Some(name) = method.name {
-                    merge_reports!(reports, self.eval_expr_into_index(name, Some(PartialClass::push_string_constant)))
+                    report_try!(reports; self.eval_expr_into_index(name, Some(Generator::push_string_constant)))
                 } else {
                     fatal_error!(reports; "`method` requires either a label or a second argument"; method.ident.span)
                 }
             }
         };
 
-        let descriptor = merge_reports!(reports, self.eval_expr_into_index(method.descriptor, Some(PartialClass::push_string_constant)));
+        let descriptor = report_try!(reports; self.eval_expr_into_index(method.descriptor, Some(Generator::push_string_constant)));
 
         let mut flags = None;
         let mut attrs = Vec::new();
@@ -662,14 +690,14 @@ impl PartialClass {
             let MetaSection { label, ident, span, body } = meta;
             match body {
                 MetaInstruction::Impl(..) => {
-                    reports.report(report_error!("`impl` may only appear after a `class` instruction"; span));
+                    report_error!(reports; "`impl` may only appear after a `class` instruction"; span);
                 },
                 MetaInstruction::Version { .. } => {
-                    reports.report(report_error!("`version` may only appear after a `class` instruction"; span));
+                    report_error!(reports; "`version` may only appear after a `class` instruction"; span);
                 },
                 MetaInstruction::Flags(exprs) => {
                     if flags.is_some() {
-                        reports.report(report_error!("duplicate `flags` instruction"; span));
+                        report_error!(reports; "duplicate `flags` instruction"; span);
                     } else {
                         let mut flag = flags::method::Flags::new();
                         for expr in exprs {
@@ -688,12 +716,12 @@ impl PartialClass {
                                     consts::flags::STRICT => flag.set_strict(true),
                                     consts::flags::SYNTHETIC => flag.set_synthetic(true),
                                     other => {
-                                        reports.report(report_error!("`{}` is not a method flag", other; ident.span));
+                                        report_error!(reports; "`{}` is not a method flag", other; ident.span);
                                         &mut flag // FIXME: this is to make this typecheck
                                     },
                                 },
                                 other => {
-                                    reports.report(report_error!("expected ident"; other.span()));
+                                    report_error!(reports; "expected ident"; other.span());
                                     &mut flag // FIXME: this is to make this typecheck
                                 }
                             };
@@ -703,29 +731,29 @@ impl PartialClass {
                 },
                 MetaInstruction::Stack(expr) => {
                     if max_stack.is_some() {
-                        reports.report(report_error!("duplicate `stack` instruction"; span));
+                        report_error!(reports; "duplicate `stack` instruction"; span);
                     } else {
                         println!("{:?}", expr);
-                        let val = merge_reports!(reports, self.eval_expr_into_index(expr, self::NO_INDEX_FN)).0; // FIXME: less horrible
+                        let val = report_try!(reports; self.eval_expr_into_index(expr, self::NO_INDEX_FN)).0; // FIXME: less horrible
                         max_stack = Some(val);
                     }
                 },
                 MetaInstruction::Locals(expr) => {
                     if max_locals.is_some() {
-                        reports.report(report_error!("duplicate `locals` instruction"; span));
+                        report_error!(reports; "duplicate `locals` instruction"; span);
                     } else {
                         println!("{:?}", expr);
-                        let val = merge_reports!(reports, self.eval_expr_into_index(expr, self::NO_INDEX_FN)).0; // FIXME: less horrible
+                        let val = report_try!(reports; self.eval_expr_into_index(expr, self::NO_INDEX_FN)).0; // FIXME: less horrible
                         max_locals = Some(val);
                     }
                 },
                 MetaInstruction::Catch { start, end, handler, ty } => {
                     // FIXME: omg this is all so horrible and sloppy
-                    let start_index = merge_reports!(reports, self.eval_expr_into_index(start, self::NO_INDEX_FN)).0; // FIXME: less horrible
-                    let end_index = merge_reports!(reports, self.eval_expr_into_index(end, self::NO_INDEX_FN)).0; // FIXME: less horrible
-                    let handler_index = merge_reports!(reports, self.eval_expr_into_index(handler, self::NO_INDEX_FN)).0; // FIXME: less horrible
+                    let start_index = report_try!(reports; self.eval_expr_into_index(start, self::NO_INDEX_FN)).0; // FIXME: less horrible
+                    let end_index = report_try!(reports; self.eval_expr_into_index(end, self::NO_INDEX_FN)).0; // FIXME: less horrible
+                    let handler_index = report_try!(reports; self.eval_expr_into_index(handler, self::NO_INDEX_FN)).0; // FIXME: less horrible
 
-                    let ty_index = merge_reports!(reports, self.eval_expr_into_index(ty, Some(|this: &mut PartialClass, s| {
+                    let ty_index = report_try!(reports; self.eval_expr_into_index(ty, Some(|this: &mut Generator, s| {
                         let str = this.push_expanded_constant(raw::Constant::Utf8(s));
                         this.push_expanded_constant(raw::Constant::Class(str))
                     })));
@@ -737,11 +765,11 @@ impl PartialClass {
                     });
                 },
                 MetaInstruction::ConstantValue(..) => {
-                    reports.report(report_error!("`const_val` may only appear after a `class` instruction"; span));
+                    report_error!(reports; "`const_val` may only appear after a `class` instruction"; span);
                 },
                 MetaInstruction::Attr(name, data) => {
                     // fixme: care about what "index" points to
-                    let name_index = merge_reports!(reports, self.eval_expr_into_index(name, Some(PartialClass::push_string_constant)));
+                    let name_index = report_try!(reports; self.eval_expr_into_index(name, Some(Generator::push_string_constant)));
                     match data {
                         Expr::Str(str) => {
                             let span = str.span;
@@ -752,10 +780,10 @@ impl PartialClass {
                                 };
                                 self.attributes.push(attribute);
                             } else {
-                                reports.report(report_error!("expected base64 string"; span));
+                                report_error!(reports; "expected base64 string"; span);
                             }
                         },
-                        _ => reports.report(report_error!("expected base64 string"; data.span())),
+                        _ => report_error!(reports; "expected base64 string"; data.span()),
                     }
                 },
             }
@@ -791,14 +819,14 @@ impl PartialClass {
                     )*
                     $(
                         CodeInstruction::$any_const(expr) => {
-                            let index = merge_reports!(reports,
+                            let index = report_try!(reports;
                                 self.eval_expr_into_index(expr, self::NO_INDEX_FN));
                             raw::Instruction::$any_const(index)
                         },
                     )*
                     $(
                         CodeInstruction::$class_const(expr) => {
-                            let class_index = merge_reports!(reports, self.eval_expr_into_index(expr, Some(|this: &mut PartialClass, s| {
+                            let class_index = report_try!(reports; self.eval_expr_into_index(expr, Some(|this: &mut Generator, s| {
                                 let str = this.push_expanded_constant(raw::Constant::Utf8(s));
                                 this.push_expanded_constant(raw::Constant::Class(str))
                             })));
@@ -807,13 +835,13 @@ impl PartialClass {
                     )*
                     $(
                         CodeInstruction::$var(expr) => {
-                            let index = VarIndex(merge_reports!(reports, self.eval_expr_into_int(expr, "u8", self::into_u8)));
+                            let index = VarIndex(report_try!(reports; self.eval_expr_into_int(expr, "u8", self::into_u8)));
                             raw::Instruction::$var(index)
                         },
                     )*
                     $(
                         CodeInstruction::$jump(expr) => {
-                            let index = CodeIndex(merge_reports!(reports, self.eval_expr_into_int(expr, "u16", self::into_u16)));
+                            let index = CodeIndex(report_try!(reports; self.eval_expr_into_int(expr, "u16", self::into_u16)));
                             raw::Instruction::$jump(index)
                         },
                     )*
@@ -1077,31 +1105,31 @@ impl PartialClass {
 
                 [other]
                     CodeInstruction::PushByte(expr) => {
-                        let byte = merge_reports!(reports, self.eval_expr_into_int(expr, "i8", self::into_i8));
+                        let byte = report_try!(reports; self.eval_expr_into_int(expr, "i8", self::into_i8));
                         raw::Instruction::PushByte(byte)
                     },
                     CodeInstruction::PushShort(expr) => {
-                        let short = merge_reports!(reports, self.eval_expr_into_int(expr, "i16", self::into_i16));
+                        let short = report_try!(reports; self.eval_expr_into_int(expr, "i16", self::into_i16));
                         raw::Instruction::PushShort(short)
                     },
 
                     CodeInstruction::LoadConstant(expr) => {
-                        let index = merge_reports!(reports, self.eval_expr_into_index(expr, Some(PartialClass::push_string_constant)));
+                        let index = report_try!(reports; self.eval_expr_into_index(expr, Some(Generator::push_string_constant)));
                         let half = HalfConstantIndex(index.0 as u8); // FIXME
                         raw::Instruction::LoadConstant(half)
                     },
                     CodeInstruction::WideLoadConstant(expr) => {
-                        let index = merge_reports!(reports, self.eval_expr_into_index(expr, Some(PartialClass::push_string_constant)));
+                        let index = report_try!(reports; self.eval_expr_into_index(expr, Some(Generator::push_string_constant)));
                         raw::Instruction::WideLoadConstant(index)
                     },
                     CodeInstruction::WideLoadWideConstant(expr) => {
-                        let index = merge_reports!(reports, self.eval_expr_into_index(expr, Some(PartialClass::push_string_constant)));
+                        let index = report_try!(reports; self.eval_expr_into_index(expr, Some(Generator::push_string_constant)));
                         raw::Instruction::WideLoadWideConstant(index)
                     },
 
                     CodeInstruction::IncInt(var, val) => {
-                        let var = VarIndex(merge_reports!(reports, self.eval_expr_into_int(var, "u8", self::into_u8)));
-                        let val = merge_reports!(reports, self.eval_expr_into_int(val, "i8", self::into_i8));
+                        let var = VarIndex(report_try!(reports; self.eval_expr_into_int(var, "u8", self::into_u8)));
+                        let val = report_try!(reports; self.eval_expr_into_int(val, "i8", self::into_i8));
                         raw::Instruction::IncInt(var, val)
                     },
 
@@ -1114,8 +1142,8 @@ impl PartialClass {
                     } => unimplemented!(),
 
                     CodeInstruction::InvokeInterface(expr, count) => {
-                        let index = merge_reports!(reports, self.eval_expr_into_index(expr, self::NO_INDEX_FN));
-                        let val = merge_reports!(reports, self.eval_expr_into_int(count, "u8", self::into_u8));
+                        let index = report_try!(reports; self.eval_expr_into_index(expr, self::NO_INDEX_FN));
+                        let val = report_try!(reports; self.eval_expr_into_int(count, "u8", self::into_u8));
                         raw::Instruction::InvokeInterface(index, val)
                     },
 
@@ -1132,13 +1160,13 @@ impl PartialClass {
                                     special::ARR_INT => raw::ArrayPrimitive::Int,
                                     special::ARR_LONG => raw::ArrayPrimitive::Long,
                                     other => {
-                                        reports.report(report_error!("expected primitive type, found `{}`", other; ident.span));
+                                        report_error!(reports; "expected primitive type, found `{}`", other; ident.span);
                                         continue
                                     }
                                 }
                             }
                             _ => {
-                                reports.report(report_error!("expected identifier"; expr.span()));
+                                report_error!(reports; "expected identifier"; expr.span());
                                 continue
                             }
                         };
@@ -1148,20 +1176,20 @@ impl PartialClass {
                     CodeInstruction::Wide(..) => unimplemented!(), // FIXME: deal with this...
 
                     CodeInstruction::NewRefMultiArray(class, dims) => {
-                        let class_index = merge_reports!(reports, self.eval_expr_into_index(class, Some(|this: &mut PartialClass, s| {
+                        let class_index = report_try!(reports; self.eval_expr_into_index(class, Some(|this: &mut Generator, s| {
                             let str = this.push_expanded_constant(raw::Constant::Utf8(s));
                             this.push_expanded_constant(raw::Constant::Class(str))
                         })));
-                        let dims_val = merge_reports!(reports, self.eval_expr_into_int(dims, "u8", self::into_u8));
+                        let dims_val = report_try!(reports; self.eval_expr_into_int(dims, "u8", self::into_u8));
                         raw::Instruction::NewRefMultiArray(class_index, dims_val)
                     },
 
                     CodeInstruction::WideGoto(expr) => {
-                        let index = WideCodeIndex(merge_reports!(reports, self.eval_expr_into_int(expr, "u32", self::into_u32)));
+                        let index = WideCodeIndex(report_try!(reports; self.eval_expr_into_int(expr, "u32", self::into_u32)));
                         raw::Instruction::WideGoto(index)
                     },
                     CodeInstruction::WideJumpSub(expr) => {
-                        let index = WideCodeIndex(merge_reports!(reports, self.eval_expr_into_int(expr, "u32", self::into_u32)));
+                        let index = WideCodeIndex(report_try!(reports; self.eval_expr_into_int(expr, "u32", self::into_u32)));
                         raw::Instruction::WideJumpSub(index)
                     },
 
@@ -1227,8 +1255,8 @@ impl PartialClass {
             Expr::Bracket(instruction) => {
                 let Instruction { label, ident, body, span } = { *instruction };
                 if let InstructionBody::Constant(i) = body {
-                    let constant = merge_reports!(reports, self.expand_constant(ConstantSection {
-                        label: None, ident, span, body: i,
+                    let constant = report_try!(reports; self.expand_constant(ConstantSection {
+                        label: None, ident, span: span.clone(), body: i,
                     }));
                     Value::Int(self.push_expanded_constant(constant).0 as i64, span)
                 } else {
@@ -1236,9 +1264,9 @@ impl PartialClass {
                 }
             },
             Expr::BinOp(first, op, second) => {
-                let span = first.span().extend_to(second.span().end);
-                let first = merge_reports!(reports, self.eval_expr(*first));
-                let second = merge_reports!(reports, self.eval_expr(*second));
+                let span = first.span().extend_to(&second);
+                let first = report_try!(reports; self.eval_expr(*first));
+                let second = report_try!(reports; self.eval_expr(*second));
 
                 match (first, second) {
                     (Value::Int(x, span1), Value::Int(y, span2)) => {
@@ -1291,9 +1319,9 @@ impl PartialClass {
             }
         }
 
-        let val = match merge_reports!(reports, self.eval_expr(expr)) {
+        let val = match report_try!(reports; self.eval_expr(expr)) {
             Value::Int(val, span) => {
-                merge_reports!(reports, parse_constant_index(val, span))
+                report_try!(reports; parse_constant_index(val, span))
             },
             Value::Float(_, span) => {
                 fatal_error!(reports; "expected index, found float"; span)
@@ -1312,7 +1340,7 @@ impl PartialClass {
         where F: FnOnce(i64) -> Option<I> {
         let mut reports = Reported::new();
 
-        match merge_reports!(reports, self.eval_expr(expr)) {
+        match report_try!(reports; self.eval_expr(expr)) {
             Value::Int(val, span) => {
                 if let Some(x) = convert(val) {
                     reports.complete(x)
@@ -1327,6 +1355,26 @@ impl PartialClass {
                 fatal_error!(reports; "expected {}, found string", expected; span)
             }
         }
+    }
+}
+
+impl Phase for Generator {
+
+    type Input = ClassSection;
+    type Output = (Option<Vec<String>>, raw::Class);
+
+    fn run(input: Vec<Self::Input>) -> Reported<Vec<Self::Output>> {
+        let mut reports = Reported::new();
+        let mut out = Vec::new();
+
+        for class in input {
+            let mut gen = Generator::new();
+            if let Some(..) = reports.merge(gen.process_section(class)) {
+                out.push(gen.assemble_class());
+            }
+        }
+
+        reports.complete(out)
     }
 }
 

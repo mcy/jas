@@ -1,7 +1,9 @@
 
 use ast::*;
 use lexer::*;
+use phase::Phase;
 use reporting::*;
+use source_file::Span;
 
 pub struct Parser {
     token_stack: Vec<Token>,
@@ -31,11 +33,11 @@ impl Parser {
         let mut reports = Reported::new();
 
         loop {
-            let token = merge_reports!(reports, self.pop_token("identifier"));
-            let span = token.span;
+            let token = report_try!(reports; self.pop_token("identifier"));
+            let span = token.span();
             match token.ty {
                 TokenType::AlphaNum => {
-                    break match merge_reports!(reports, AlphaNum::parse(token)) {
+                    break match report_try!(reports; AlphaNum::parse(token)) {
                         AlphaNum::Ident(ident) => reports.complete(ident),
                         _ => {
                             fatal_error!(reports; "expected identifier but found literal"; span)
@@ -72,7 +74,7 @@ impl Parser {
         while let Some(token) = { self.token_stack.pop() } {
             match token.ty {
                 TokenType::AlphaNum => {
-                    let expr = match merge_reports!(reports, AlphaNum::parse(token)) {
+                    let expr = match report_try!(reports; AlphaNum::parse(token)) {
                         AlphaNum::Ident(ident) => Expr::Ref(ident),
                         AlphaNum::Int(int) => Expr::Int(int),
                         AlphaNum::Float(float) => Expr::Float(float),
@@ -146,8 +148,8 @@ impl Parser {
                             }
                         },
                         "[" => {
-                            let line = merge_reports!(reports, self.consume_source_line(true));
-                            let instruction = merge_reports!(reports, Instruction::from_source(line));
+                            let line = report_try!(reports; self.consume_source_line(true));
+                            let instruction = report_try!(reports; Instruction::from_source(line));
                             output.push(StackElement::Expr(Expr::Bracket(Box::new(instruction))));
                         },
                         "]" => {
@@ -178,8 +180,8 @@ impl Parser {
                 Some(StackElement::Expr(expr)) => reports.complete(expr),
                 Some(StackElement::BinOp(op, span)) => {
                     // backwards, since we're popping off the back
-                    let second = merge_reports!(reports, consume_output(stack));
-                    let first = merge_reports!(reports, consume_output(stack));
+                    let second = report_try!(reports; consume_output(stack));
+                    let first = report_try!(reports; consume_output(stack));
                     reports.complete(Expr::BinOp(Box::new(first), op, Box::new(second)))
                 },
                 // delimiters can't appear in the operand stack
@@ -191,7 +193,7 @@ impl Parser {
             }
         }
 
-        let expr = merge_reports!(reports, consume_output(&mut output));
+        let expr = report_try!(reports; consume_output(&mut output));
 
         if !output.is_empty() {
             fatal_error!(reports; "orphaned expr"; match output.pop().unwrap() {
@@ -208,18 +210,18 @@ impl Parser {
         let mut reports = Reported::new();
 
         let (label, instruction, mut span) = {
-            let maybe_label = merge_reports!(reports, self.consume_ident());
+            let maybe_label = report_try!(reports; self.consume_ident());
             let maybe_colon = self.token_stack.pop();
             if maybe_colon.is_some() && maybe_colon.as_ref().unwrap().value == ":" {
-                let instruction = merge_reports!(reports, self.consume_ident());
+                let instruction = report_try!(reports; self.consume_ident());
                 let maybe_colon = maybe_colon.unwrap();
-                let span = maybe_label.span.extend_to(instruction.span.end);
+                let span = maybe_label.span.extend_to(&instruction);
                 (Some(maybe_label), instruction, span)
             } else {
                 if let Some(token) = maybe_colon {
                     self.token_stack.push(token);
                 }
-                let span = maybe_label.span;
+                let span = maybe_label.span();
                 (None, maybe_label, span)
             }
         };
@@ -239,7 +241,7 @@ impl Parser {
                         "," => {
                             if scanning_for_comma {
                                 scanning_for_comma = false;
-                                span.extend_to(token.span.end);
+                                span.extend_to(&token);
                             } else {
                                 fatal_error!(reports; "expected expression, found `,`"; token.span)
                             }
@@ -251,8 +253,8 @@ impl Parser {
                         }
                         _ => {
                             self.token_stack.push(token);
-                            let expr = merge_reports!(reports, self.consume_expr(is_bracket));
-                            span.extend_to_mut(expr.span().end);
+                            let expr = report_try!(reports; self.consume_expr(is_bracket));
+                            span.extend_to_mut(&expr);
                             args.push(expr);
                             scanning_for_comma = true;
                         },
@@ -260,8 +262,8 @@ impl Parser {
                 },
                 _ => {
                     self.token_stack.push(token);
-                    let expr = merge_reports!(reports, self.consume_expr(is_bracket));
-                    span.extend_to_mut(expr.span().end);
+                    let expr = report_try!(reports; self.consume_expr(is_bracket));
+                    span.extend_to_mut(&expr);
                     args.push(expr);
                     scanning_for_comma = true;
                 },
@@ -288,6 +290,24 @@ impl Parser {
         reports.complete(lines)
     }
 
+}
+
+impl Phase for Parser {
+
+    type Input = Vec<Token>;
+    type Output = Vec<Instruction>;
+
+    fn run(input: Vec<Self::Input>) -> Reported<Vec<Self::Output>> {
+        let mut reports = Reported::new();
+        let mut out = Vec::new();
+        for tokens in input {
+            let mut parser = Parser::new(tokens);
+            if let Some(lines) = reports.merge(parser.consume_all()) {
+                out.push(lines);
+            }
+        }
+        reports.complete(out)
+    }
 }
 
 enum AlphaNum {

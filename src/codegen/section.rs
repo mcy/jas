@@ -1,6 +1,8 @@
 use ast::*;
 use codegen::*;
+use phase::Phase;
 use reporting::*;
+use source_file::Span;
 
 // represents a pile of instructions
 // contiguously making up a class
@@ -26,7 +28,7 @@ impl ClassSection {
         let mut result = Vec::new();
 
         while !stack.is_empty() {
-            result.push(merge_reports!(reports, ClassSection::consume_class(&mut stack)));
+            result.push(report_try!(reports; ClassSection::consume_class(&mut stack)));
         }
 
         reports.complete(result)
@@ -44,7 +46,7 @@ impl ClassSection {
             if let InstructionBody::Item(ItemInstruction::Class { this_class, super_class }) = body {
                 break (label, ident, span, this_class, super_class);
             } else {
-                reports.report(report_error!("found `{}` before `class` instruction", ident.name; ident.span));
+                report_error!(reports; "found `{}` before `class` instruction", ident.name; ident.span);
             }
         };
 
@@ -69,9 +71,7 @@ impl ClassSection {
                                 },
                                 InstructionBody::Meta(i) => meta.push(MetaSection { label, ident, span, body: i }),
                                 InstructionBody::Constant(i) => constants.push(ConstantSection { label, ident, span, body: i }),
-                                InstructionBody::Code(..) => reports.report(report_error!(
-                                    "unexpected code instruction `{}` in field", ident.name; ident.span
-                                ))
+                                InstructionBody::Code(..) => report_error!(reports; "unexpected code instruction `{}` in field", ident.name; ident.span)
                             }
                         }
                         fields.push(FieldSection {
@@ -108,13 +108,33 @@ impl ClassSection {
                 }
                 InstructionBody::Meta(i) => top_level.push(MetaSection { label, ident, span, body: i }),
                 InstructionBody::Constant(i) => constants.push(ConstantSection { label, ident, span, body: i }),
-                InstructionBody::Code(..) => reports.report(report_error!(
-                    "unexpected code instruction `{}`", ident.name; ident.span
-                ))
+                InstructionBody::Code(..) => report_error!(reports; "unexpected code instruction `{}`", ident.name; ident.span)
             }
         }
 
         reports.complete(ClassSection { label, ident, span, this_class, super_class, top_level, constants, fields, methods })
+    }
+}
+
+impl Phase for ClassSection {
+
+    type Input = Vec<Instruction>;
+    type Output = ClassSection;
+
+    fn run(input: Vec<Self::Input>) -> Reported<Vec<Self::Output>> {
+
+        let mut reports = Reported::new();
+        let mut out = Vec::new();
+
+        for instructions in input {
+            if let Some(classes) = reports.merge(ClassSection::from_instructions(instructions)) {
+                for class in classes {
+                    out.push(class);
+                }
+            }
+        }
+
+        reports.complete(out)
     }
 }
 

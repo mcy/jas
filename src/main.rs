@@ -7,37 +7,42 @@ pub mod reporting;
 
 pub mod ast;
 pub mod consts;
-pub mod lexer;
 pub mod codegen;
+pub mod lexer;
+pub mod phase;
+pub mod source_file;
+
+use phase::Phase;
 
 use classfile::raw::io;
 
-use std::fs::File;
+use std::fs;
+use std::path;
 use std::io::prelude::*;
+use std::rc::Rc;
 
 fn main() {
 
-    let lexer = lexer::Lexer::new(include_str!("hello_compact.j").into());
+    let src = vec![Rc::new(source_file::SourceFile::from_str("hello.j".into(), include_str!("hello.j").into()))];
 
-    let tokens = lexer.collect::<Vec<_>>();
+    let tokens = lexer::Lexer::run_and_error(src);
+    let ast = ast::Parser::run_and_error(tokens);
+    let sections = codegen::ClassSection::run_and_error(ast);
+    let classes = codegen::Generator::run_and_error(sections);
 
-    let mut parser = ast::Parser::new(tokens);
+    for (i, (path, class)) in classes.into_iter().enumerate() {
 
-    let ast = parser.consume_all();
-    println!("{:?}", ast);
+        let path = path.unwrap_or_else(|| vec![format!("unknown{}", i)]);
 
-    let mut sections = codegen::ClassSection::from_instructions(ast.unwrap()).unwrap();
+        let mut buf = path::PathBuf::new();
+        buf.push("target");
+        buf.push("jas");
+        buf.extend(path.into_iter());
+        if let Some(path) = buf.as_path().parent() {
+            fs::create_dir_all(path);
+        }
 
-    for (i, section) in sections.into_iter().enumerate() {
-        let mut partial = codegen::PartialClass::new();
-        let x = partial.process_section(section);
-        println!("{:?}", partial);
-        println!("{:?}", x);
-
-        let class = partial.assemble_class();
-
-        let mut file = File::create("Hello.class").unwrap();
+        let mut file = fs::File::create(buf).unwrap();
         io::emit_class(&class, &mut file).unwrap();
     }
-
 }

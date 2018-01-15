@@ -1,14 +1,24 @@
 use std::mem;
+use std::rc::Rc;
 use std::result;
 use std::vec;
 
-use reporting::{Position, Span};
+use phase::Phase;
+use source_file::*;
+use reporting::*;
 
 #[derive(Clone, Debug)]
 pub struct Token {
     pub value: String,
     pub span: Span,
     pub ty: TokenType,
+}
+
+impl Spannable for Token {
+
+    fn span(&self) -> Span {
+        self.span.clone()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,7 +31,7 @@ pub enum TokenType {
 }
 
 pub struct Lexer {
-    input: String,
+    src: Rc<SourceFile>,
     chars: vec::IntoIter<char>,
     current_token: Option<String>,
     start_of_current: Option<Position>,
@@ -47,10 +57,10 @@ enum LexerState {
 
 impl Lexer {
 
-    pub fn new(input: String) -> Lexer {
-        let chars = input.chars().collect::<Vec<_>>().into_iter();
+    pub fn new(src: Rc<SourceFile>) -> Lexer {
+        let chars = src.lines.join("\n").chars().collect::<Vec<_>>().into_iter();
         Lexer {
-            input,
+            src,
             chars,
             current_token: None,
             start_of_current: None,
@@ -77,7 +87,7 @@ impl Lexer {
         mem::swap(&mut swapped, &mut self.current_token);
         self.token_queue.insert(0, Token {
             value: swapped.unwrap(),
-            span: Span::new(self.start_of_current.unwrap(), self.current_position),
+            span: Span::new(self.src.clone(), self.start_of_current.unwrap(), self.current_position),
             ty,
         });
         self.state = LexerState::None;
@@ -378,5 +388,17 @@ impl Iterator for Lexer {
     fn next(&mut self) -> Option<Self::Item> {
         while !self.consume_char() {}
         self.token_queue.pop()
+    }
+}
+
+impl Phase for Lexer {
+
+    type Input = Rc<SourceFile>;
+    type Output = Vec<Token>;
+
+    fn run(input: Vec<Self::Input>) -> Reported<Vec<Self::Output>> {
+        Reported::new().complete(input.into_iter().map(|str| {
+            Lexer::new(str).collect()
+        }).collect())
     }
 }

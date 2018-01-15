@@ -1,58 +1,6 @@
-#[derive(Clone, Copy, Debug)]
-pub struct Position {
-    pub line: usize,
-    pub column: usize,
-}
+use source_file::*;
 
-impl Position {
-
-    pub fn new(line: usize, column: usize) -> Position {
-        Position { line, column, }
-    }
-
-    pub fn advance_col(&self) -> Position {
-        Position::new(self.line, self.column + 1)
-    }
-
-    pub fn advance_line(&self) -> Position {
-        Position::new(self.line + 1, 0)
-    }
-
-    pub fn advance_col_mut(&mut self) {
-        *self = self.advance_col();
-    }
-
-    pub fn advance_line_mut(&mut self) {
-        *self = self.advance_line();
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct Span {
-    pub start: Position,
-    pub end: Position,
-}
-
-impl Span {
-
-    pub fn new(start: Position, end: Position) -> Span {
-        Span { start, end, }
-    }
-
-    pub fn extend_to(&self, new_end: Position) -> Span {
-        Span::new(self.start, new_end)
-    }
-
-    pub fn extend_to_mut(&mut self, new_end: Position) {
-        *self = self.extend_to(new_end)
-    }
-}
-
-pub type Result<T> = ::std::result::Result<T, Report>;
-
-macro_rules! report_error {
-    ($($args:tt)+) => { __report!($crate::reporting::ReportKind::Error, $($args)+) };
-}
+pub use source_file::Spannable;
 
 macro_rules! fatal_error {
     ($reports:ident; $($args:tt)+) => {{
@@ -61,8 +9,49 @@ macro_rules! fatal_error {
     }};
 }
 
+macro_rules! report_error {
+    ($reports:ident; $($args:tt)+) => {{
+        $reports.report(__report!($crate::reporting::ReportKind::Error, $($args)+));
+    }};
+}
+
 macro_rules! report_warning {
-    ($($args:tt)+) => { __report!($crate::reporting::ReportKind::Warning, $($args)+) };
+    ($reports:ident; $($args:tt)+) => {{
+        $reports.report(__report!($crate::reporting::ReportKind::Warning, $($args)+));
+    }};
+}
+
+macro_rules! report_try {
+    ($reports:expr; $val:expr) => {
+        match $reports.merge($val) {
+            Some(x) => x,
+            None => return $reports,
+        }
+    };
+    ($reports:expr; $val:expr, $default:expr) => {
+        match $reports.merge($val) {
+            Some(x) => x,
+            None => $default,
+        }
+    }
+}
+
+macro_rules! report_cont {
+    ($reports:expr; $val:expr) => {
+        match $reports.merge($val) {
+            Some(x) => x,
+            None => continue,
+        }
+    }
+}
+
+macro_rules! report_break {
+    ($reports:expr; $val:expr) => {
+        match $reports.merge($val) {
+            Some(x) => x,
+            None => break,
+        }
+    }
 }
 
 macro_rules! __report {
@@ -101,13 +90,13 @@ macro_rules! __report {
 
 macro_rules! __span {
     ($loc:expr, $message:expr, $($args:expr)* $(,)*) => {
-        ($loc, Some(format!($message, $($args),*)))
+        ($loc.span(), Some(format!($message, $($args),*)))
     };
     ($loc:expr, $message:expr) => {
-        ($loc, Some($message.into()))
+        ($loc.span(), Some($message.into()))
     };
     ($loc:expr) => {
-        ($loc, None)
+        ($loc.span(), None)
     };
 }
 
@@ -118,18 +107,65 @@ pub struct Report {
     pub locations: Vec<(Span, Option<String>)>,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum ReportKind {
-    Error, Warning,
+impl Report {
+
+    pub fn format(&self) -> String {
+        let mut lines = Vec::new();
+        lines.push(format!("{}: {}",
+            match self.kind {
+                ReportKind::Error => "error",
+                ReportKind::Warning => "warning"
+            },
+            &self.message,
+        ));
+
+        if self.locations.is_empty() {
+            lines.push("at <unknown>".into())
+        } else {
+            // FIXME: handle multiple locations and messages
+            let (ref span, _) = self.locations[0];
+            lines.push(format!(" at {}:{}:{}", &span.src.path, span.start.line + 1, span.start.column + 1));
+
+            let (top, middle, bottom) = span.lines();
+
+            let line_padding = format!("{}", span.end.line + 1).len().max(2);
+
+            lines.push(format!("{1: >0$} | {2}", line_padding, "", top));
+
+            for (i, str) in middle.iter().enumerate() {
+                lines.push(format!("{1: >0$} | {2}", line_padding, span.start.line + 1 + i, str));
+                if i == 0 {
+                    if span.start.line == span.end.line {
+                        let whitespace = span.start.column;
+                        let underline = span.end.column - span.start.column;
+                        lines.push(format!("{3: >0$} | {3: ^1$}{3:^^2$}", line_padding, whitespace, underline, ""));
+                    } else {
+                        let whitespace = span.start.column;
+                        let underline = str.len() - span.start.column;
+                        lines.push(format!("{3: >0$} | {3: ^1$}{3:^^2$}", line_padding, whitespace, underline, ""));
+                    }
+                } else if i == str.len() - 1 {
+                    // we can assume there are multiple lines
+                    let whitespace = 0;
+                    let underline = span.end.column;
+                    lines.push(format!("{3: >0$} | {3: ^1$}{3:^^2$}", line_padding, whitespace, underline, ""));
+                } else {
+                    let whitespace = 0;
+                    let underline = str.len();
+                    lines.push(format!("{3: >0$} | {3: ^1$}{3:^^2$}", line_padding, whitespace, underline, ""));
+                }
+            }
+
+            lines.push(format!("{1: >0$} | {2}", line_padding, "", bottom));
+        }
+
+        lines.join("\n")
+    }
 }
 
-macro_rules! merge_reports {
-    ($current:expr, $returned:expr) => {
-        match $current.merge($returned) {
-            Some(x) => x,
-            None => return $current,
-        }
-    }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReportKind {
+    Error, Warning,
 }
 
 #[derive(Debug)]
@@ -174,5 +210,9 @@ impl<T> Reported<T> {
                 panic!("aborted due to previous errors");
             }
         }
+    }
+
+    pub fn has_errors(&self) -> bool {
+        self.reports.iter().any(|r| r.kind == ReportKind::Error)
     }
 }

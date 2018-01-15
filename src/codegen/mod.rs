@@ -46,4 +46,4 @@ fn into_u32(val: i64) -> Option<u32> {
     }
 }
 
-const NO_INDEX_FN: Option<fn(&mut PartialClass, String) -> ::classfile::indexing::ConstantIndex> = None;
+const NO_INDEX_FN: Option<fn(&mut Generator, String) -> ::classfile::indexing::ConstantIndex> = None;

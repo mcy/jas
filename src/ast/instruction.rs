@@ -1,6 +1,7 @@
 
 use ast::*;
 use reporting::*;
+use source_file::Span;
 
 #[derive(Clone, Debug)]
 pub struct Instruction {
@@ -27,17 +28,17 @@ impl Instruction {
         fn expected_args(reports: &mut Reported<Instruction>, line: &SourceLine, min: usize, max: usize) -> bool{
             let len = line.args.len();
             if len < min {
-                reports.report(report_error!(
-                "not enough arguments for instruction `{}`, expected {}", line.instruction.name, min;
-                line.instruction.span
-            ));
+                report_error!(reports;
+                    "not enough arguments for instruction `{}`, expected {}", line.instruction.name, min;
+                    line.instruction.span
+                );
                 false
             } else if len > max {
                 for i in max..len {
-                    reports.report(report_error!(
-                    "unexpected argument for instruction `{}`", line.instruction.name;
-                    line.args[i].span()
-                ));
+                    report_error!(reports;
+                        "unexpected argument for instruction `{}`", line.instruction.name;
+                        line.args[i].span()
+                    );
                 }
                 false
             } else  {
@@ -49,10 +50,10 @@ impl Instruction {
         fn min_args(reports: &mut Reported<Instruction>, line: &SourceLine, n: usize) -> bool{
             let len = line.args.len();
             if len < n {
-                reports.report(report_error!(
+                report_error!(reports;
                     "not enough arguments for instruction `{}`, expected {}", line.instruction.name, n;
                     line.instruction.span
-                ));
+                );
                 false
             } else  {
                 true
@@ -451,10 +452,10 @@ impl Instruction {
                                 if let Some(jump) = iter.next() {
                                     match_table.push((index.clone(), jump.clone()))
                                 } else {
-                                    reports.report(report_error!(
-                                    "expected jump offset for match table row";
-                                    index.span()
-                                ));
+                                    report_error!(reports;
+                                        "expected jump offset for match table row";
+                                        index.span()
+                                    );
                                 }
                             } else {
                                 break;
@@ -548,7 +549,7 @@ impl Instruction {
             inst::IMPLEMENTATION_DEFINED_1 => op_0!(CodeI::ImplementationDefined1, Code),
             inst::IMPLEMENTATION_DEFINED_2 => op_0!(CodeI::ImplementationDefined2, Code),
 
-            other => fatal_error!(reports; "unknown instruction `{}`", other),
+            other => fatal_error!(reports; "unknown instruction `{}`", other; line.instruction),
         }
 
         if let Some(inst) = result {
@@ -570,12 +571,14 @@ impl Instruction {
         &self.body
     }
 
-    pub fn span(&self) -> Span {
-        self.span
-    }
-
     pub fn into_body(self) -> InstructionBody {
         self.body
+    }
+}
+
+impl Spannable for Instruction {
+    fn span(&self) -> Span {
+        self.span.clone()
     }
 }
 
