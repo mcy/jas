@@ -11,6 +11,7 @@ pub mod codegen;
 pub mod lexer;
 pub mod phase;
 pub mod source_file;
+pub mod util;
 
 use phase::Phase;
 
@@ -23,7 +24,7 @@ use std::rc::Rc;
 
 fn main() {
 
-    let src = vec![Rc::new(source_file::SourceFile::from_str("hello.j".into(), include_str!("hello.j").into()))];
+    let src = vec![Rc::new(source_file::SourceFile::from_str("loops.j".into(), include_str!("loops.j").into()))];
 
     let tokens = lexer::Lexer::run_and_error(src);
     let ast = ast::Parser::run_and_error(tokens);
@@ -32,7 +33,9 @@ fn main() {
 
     for (i, (path, class)) in classes.into_iter().enumerate() {
 
-        let path = path.unwrap_or_else(|| vec![format!("unknown{}", i)]);
+        println!("{:?}", class);
+
+        let path = path.unwrap_or_else(|| vec![format!("unknown{}.class", i)]);
 
         let mut buf = path::PathBuf::new();
         buf.push("target");

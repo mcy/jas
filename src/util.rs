@@ -19,8 +19,13 @@ impl<T> Stack<T> {
     }
 
     pub fn from_vec(mut vec: Vec<T>) -> Stack<T> {
-        for i in .. vec.len() / 2 {
-            mem::swap(&mut vec[i], &mut vec[vec.len() - i])
+        {
+            let len = vec.len();
+            let (front, back) = vec.split_at_mut((len + 1) / 2);
+            let back_len = back.len();
+            for i in 0..back_len {
+                mem::swap(&mut front[i], &mut back[back_len - i - 1])
+            }
         }
         Stack { inner: vec, }
     }

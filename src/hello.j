@@ -1,3 +1,4 @@
+
             class           "Hello", "java/lang/Object",
             flags           public, super, final, synthetic
             version         0, 51,

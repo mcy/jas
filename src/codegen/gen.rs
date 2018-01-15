@@ -90,17 +90,22 @@ impl Generator {
 
     fn get_constant(&self, index: ConstantIndex) -> Option<&raw::Constant> {
         let index = index.0 as usize;
-        if index <= self.declared_count {
+        if index < self.declared_count {
             Some(&self.declared_constants[index - 1])
         } else if index - self.declared_count <= self.expanded_constants.len() {
-            Some(&self.expanded_constants[index - self.declared_count - 1])
+            Some(&self.expanded_constants[index - self.declared_count])
         } else {
             None
         }
     }
 
     pub fn file_name(&mut self) -> Option<Vec<String>> {
-        if let Some(&raw::Constant::Class(ref class)) = self.get_constant(self.this_class.as_ref().unwrap().clone()) {
+        if let Some(&raw::Constant::Class(ref class)) = {
+
+            let c = self.get_constant(self.this_class.as_ref().unwrap().clone());
+            println!("{:?}", c);
+            c
+        } {
             if let Some(&raw::Constant::Utf8(ref str)) = self.get_constant(class.clone()) {
                 Some(format!("{}.class", str).split("/").map(Into::into).collect())
             } else {
@@ -240,14 +245,16 @@ impl Generator {
                     }
                 }
             }
+            let mut code_index = 0;
             for code in method.code.iter() {
                 if let Some(ref label) = code.label {
                     if self.labels.contains_key(&label.name) {
                         report_error!(reports; "duplicate label"; label.span);
                     } else {
-                        self.labels.insert(label.name.clone(), LabelKind::Code(0)); // FIXME
+                        self.labels.insert(label.name.clone(), LabelKind::Code(code_index as u32)); // FIXME
                     }
                 }
+                code_index += code.body.len(code_index);
             }
         }
 
@@ -260,11 +267,11 @@ impl Generator {
 
         let mut reports = Reported::new();
 
-        let this_index = report_try!(reports; self.eval_expr_into_index(this_class.clone(), Some(|this: &mut Generator, s| {
+        let this_index = report_try!(reports; self.eval_expr_into_const_index(this_class.clone(), Some(|this: &mut Generator, s| {
             let str = this.push_expanded_constant(raw::Constant::Utf8(s));
             this.push_expanded_constant(raw::Constant::Class(str))
         })));
-        let super_index = report_try!(reports; self.eval_expr_into_index(super_class.clone(), Some(|this: &mut Generator, s| {
+        let super_index = report_try!(reports; self.eval_expr_into_const_index(super_class.clone(), Some(|this: &mut Generator, s| {
             let str = this.push_expanded_constant(raw::Constant::Utf8(s));
             this.push_expanded_constant(raw::Constant::Class(str))
         })));
@@ -295,20 +302,20 @@ impl Generator {
         fn handle_item_ref(this: &mut Generator, class: Expr, name: Expr, descriptor: Option<Expr>) -> Reported<(ConstantIndex, ConstantIndex)> {
             let mut reports = Reported::new();
 
-            let class_index = report_try!(reports; this.eval_expr_into_index(class, Some(|this: &mut Generator, s| {
+            let class_index = report_try!(reports; this.eval_expr_into_const_index(class, Some(|this: &mut Generator, s| {
                     let str = this.push_expanded_constant(raw::Constant::Utf8(s));
                     this.push_expanded_constant(raw::Constant::Class(str))
                 })));
             let name_and_type = if let Some(descriptor) = descriptor {
                 let name_index = report_try!(reports;
-                        this.eval_expr_into_index(name, Some(Generator::push_string_constant)));
+                        this.eval_expr_into_const_index(name, Some(Generator::push_string_constant)));
                 let descriptor_index = report_try!(reports;
-                        this.eval_expr_into_index(descriptor, Some(Generator::push_string_constant)));
+                        this.eval_expr_into_const_index(descriptor, Some(Generator::push_string_constant)));
                 this.push_expanded_constant(raw::Constant::Signature {
                     name: name_index, descriptor: descriptor_index,
                 })
             } else {
-                report_try!(reports; this.eval_expr_into_index(name, self::NO_INDEX_FN))
+                report_try!(reports; this.eval_expr_into_const_index(name, self::NO_INDEX_FN))
             };
 
             reports.complete((class_index, name_and_type))
@@ -319,7 +326,7 @@ impl Generator {
         let constant = match body {
             ConstantInstruction::ClassRef(class) => {
                 let index = report_try!(reports;
-                    self.eval_expr_into_index(class, Some(Generator::push_string_constant)));
+                    self.eval_expr_into_const_index(class, Some(Generator::push_string_constant)));
                 raw::Constant::Class(index)
             },
             ConstantInstruction::FieldRef { class, name, descriptor } => {
@@ -336,7 +343,7 @@ impl Generator {
             },
             ConstantInstruction::String(str) => {
                 let index = report_try!(reports;
-                    self.eval_expr_into_index(str, Some(Generator::push_string_constant)));
+                    self.eval_expr_into_const_index(str, Some(Generator::push_string_constant)));
                 raw::Constant::String(index)
             },
             ConstantInstruction::Integer(expr) => {
@@ -389,7 +396,6 @@ impl Generator {
                         fatal_error!(reports; "expected float, found string"; span)
                     },
                     Value::Float(val, _) => {
-                        // FIXME: ensure this actually fits
                         raw::Constant::Double(val)
                     },
                     Value::Str(_, span) => {
@@ -399,9 +405,9 @@ impl Generator {
             },
             ConstantInstruction::NameAndType(name, descriptor) => {
                 let name_index = report_try!(reports;
-                    self.eval_expr_into_index(name, Some(Generator::push_string_constant)));
+                    self.eval_expr_into_const_index(name, Some(Generator::push_string_constant)));
                 let descriptor_index = report_try!(reports;
-                    self.eval_expr_into_index(descriptor, Some(Generator::push_string_constant)));
+                    self.eval_expr_into_const_index(descriptor, Some(Generator::push_string_constant)));
                 raw::Constant::Signature {
                     name: name_index, descriptor: descriptor_index,
                 }
@@ -436,14 +442,14 @@ impl Generator {
                     }
                     other => fatal_error!(reports; "expected ident"; other.span())
                 };
-                let referent_index = report_try!(reports; self.eval_expr_into_index(referent, self::NO_INDEX_FN));
+                let referent_index = report_try!(reports; self.eval_expr_into_const_index(referent, self::NO_INDEX_FN));
                 raw::Constant::MethodHandle {
                     kind, referent: referent_index,
                 }
             },
             ConstantInstruction::MethodType(expr) => {
                 let index = report_try!(reports;
-                    self.eval_expr_into_index(expr, Some(Generator::push_string_constant)));
+                    self.eval_expr_into_const_index(expr, Some(Generator::push_string_constant)));
                 raw::Constant::MethodType(index)
             },
             ConstantInstruction::DynamicTarget { .. } => {
@@ -462,7 +468,7 @@ impl Generator {
             let MetaSection { label, ident, span, body } = meta;
             match body {
                 MetaInstruction::Impl(exprs) => for expr in exprs {
-                    let index = report_try!(reports; self.eval_expr_into_index(expr, Some(|this: &mut Generator, s| {
+                    let index = report_try!(reports; self.eval_expr_into_const_index(expr, Some(|this: &mut Generator, s| {
                         let str = this.push_expanded_constant(raw::Constant::Utf8(s));
                         this.push_expanded_constant(raw::Constant::Class(str))
                     })));
@@ -473,8 +479,10 @@ impl Generator {
                         report_error!(reports; "duplicate `version` instruction"; span);
                     } else {
                         // FIXME: use something reasonable
-                        let minor_val = report_try!(reports; self.eval_expr_into_index(minor, self::NO_INDEX_FN));
-                        let major_val = report_try!(reports; self.eval_expr_into_index(major, self::NO_INDEX_FN));
+                        println!("{:?}", major);
+                        let minor_val = report_try!(reports; self.eval_expr_into_const_index(minor, self::NO_INDEX_FN));
+                        let major_val = report_try!(reports; self.eval_expr_into_const_index(major, self::NO_INDEX_FN));
+                        println!("{:?}", major_val);
                         self.minor_major_version = Some((minor_val.0, major_val.0));
                     }
                 },
@@ -522,11 +530,11 @@ impl Generator {
                 },
                 MetaInstruction::Attr(name, data) => {
                     // fixme: care about what "index" points to
-                    let name_index = report_try!(reports; self.eval_expr_into_index(name, Some(Generator::push_string_constant)));
+                    let name_index = report_try!(reports; self.eval_expr_into_const_index(name, Some(Generator::push_string_constant)));
                     match data {
                         Expr::Str(str) => {
                             let span = str.span;
-                            if let Ok(data) = base64::decode(str.value.as_str()) { // FIXME: clone
+                            if let Ok(data) = base64::decode(str.value.as_str()) {
                                 let attribute = raw::Attribute {
                                     name: name_index,
                                     info: raw::AttributeInfo::Other(data),
@@ -558,14 +566,14 @@ impl Generator {
                 }
             } else {
                 if let Some(name) = field.name {
-                    report_try!(reports; self.eval_expr_into_index(name, Some(Generator::push_string_constant)))
+                    report_try!(reports; self.eval_expr_into_const_index(name, Some(Generator::push_string_constant)))
                 } else {
                     fatal_error!(reports; "`field` requires either a label or a second argument"; field.ident.span)
                 }
             }
         };
 
-        let descriptor = report_try!(reports; self.eval_expr_into_index(field.descriptor, Some(Generator::push_string_constant)));
+        let descriptor = report_try!(reports; self.eval_expr_into_const_index(field.descriptor, Some(Generator::push_string_constant)));
 
         let mut flags = None;
         let mut attrs = Vec::new();
@@ -620,13 +628,13 @@ impl Generator {
                     report_error!(reports; "`catch` may only appear after a `method` instruction"; span);
                 },
                 MetaInstruction::ConstantValue(expr) => {
-                    let index = report_try!(reports; self.eval_expr_into_index(expr, self::NO_INDEX_FN));
+                    let index = report_try!(reports; self.eval_expr_into_const_index(expr, self::NO_INDEX_FN));
                     let name = self.push_string_constant(flags::attribute::ATTR_CONSTANT_VALUE.into());
                     attrs.push(raw::Attribute { name, info: raw::AttributeInfo::ConstantValue(index)})
                 },
                 MetaInstruction::Attr(name, data) => {
                     // fixme: care about what "index" points to
-                    let name_index = report_try!(reports; self.eval_expr_into_index(name, Some(Generator::push_string_constant)));
+                    let name_index = report_try!(reports; self.eval_expr_into_const_index(name, Some(Generator::push_string_constant)));
                     match data {
                         Expr::Str(str) => {
                             let span = str.span;
@@ -670,14 +678,14 @@ impl Generator {
                 }
             } else {
                 if let Some(name) = method.name {
-                    report_try!(reports; self.eval_expr_into_index(name, Some(Generator::push_string_constant)))
+                    report_try!(reports; self.eval_expr_into_const_index(name, Some(Generator::push_string_constant)))
                 } else {
                     fatal_error!(reports; "`method` requires either a label or a second argument"; method.ident.span)
                 }
             }
         };
 
-        let descriptor = report_try!(reports; self.eval_expr_into_index(method.descriptor, Some(Generator::push_string_constant)));
+        let descriptor = report_try!(reports; self.eval_expr_into_const_index(method.descriptor, Some(Generator::push_string_constant)));
 
         let mut flags = None;
         let mut attrs = Vec::new();
@@ -733,8 +741,7 @@ impl Generator {
                     if max_stack.is_some() {
                         report_error!(reports; "duplicate `stack` instruction"; span);
                     } else {
-                        println!("{:?}", expr);
-                        let val = report_try!(reports; self.eval_expr_into_index(expr, self::NO_INDEX_FN)).0; // FIXME: less horrible
+                        let val = report_try!(reports; self.eval_expr_into_const_index(expr, self::NO_INDEX_FN)).0; // FIXME: less horrible
                         max_stack = Some(val);
                     }
                 },
@@ -742,18 +749,17 @@ impl Generator {
                     if max_locals.is_some() {
                         report_error!(reports; "duplicate `locals` instruction"; span);
                     } else {
-                        println!("{:?}", expr);
-                        let val = report_try!(reports; self.eval_expr_into_index(expr, self::NO_INDEX_FN)).0; // FIXME: less horrible
+                        let val = report_try!(reports; self.eval_expr_into_const_index(expr, self::NO_INDEX_FN)).0; // FIXME: less horrible
                         max_locals = Some(val);
                     }
                 },
                 MetaInstruction::Catch { start, end, handler, ty } => {
                     // FIXME: omg this is all so horrible and sloppy
-                    let start_index = report_try!(reports; self.eval_expr_into_index(start, self::NO_INDEX_FN)).0; // FIXME: less horrible
-                    let end_index = report_try!(reports; self.eval_expr_into_index(end, self::NO_INDEX_FN)).0; // FIXME: less horrible
-                    let handler_index = report_try!(reports; self.eval_expr_into_index(handler, self::NO_INDEX_FN)).0; // FIXME: less horrible
+                    let start_index = report_try!(reports; self.eval_expr_into_const_index(start, self::NO_INDEX_FN)).0; // FIXME: less horrible
+                    let end_index = report_try!(reports; self.eval_expr_into_const_index(end, self::NO_INDEX_FN)).0; // FIXME: less horrible
+                    let handler_index = report_try!(reports; self.eval_expr_into_const_index(handler, self::NO_INDEX_FN)).0; // FIXME: less horrible
 
-                    let ty_index = report_try!(reports; self.eval_expr_into_index(ty, Some(|this: &mut Generator, s| {
+                    let ty_index = report_try!(reports; self.eval_expr_into_const_index(ty, Some(|this: &mut Generator, s| {
                         let str = this.push_expanded_constant(raw::Constant::Utf8(s));
                         this.push_expanded_constant(raw::Constant::Class(str))
                     })));
@@ -769,7 +775,7 @@ impl Generator {
                 },
                 MetaInstruction::Attr(name, data) => {
                     // fixme: care about what "index" points to
-                    let name_index = report_try!(reports; self.eval_expr_into_index(name, Some(Generator::push_string_constant)));
+                    let name_index = report_try!(reports; self.eval_expr_into_const_index(name, Some(Generator::push_string_constant)));
                     match data {
                         Expr::Str(str) => {
                             let span = str.span;
@@ -790,9 +796,6 @@ impl Generator {
         }
 
         let mut code_len = 0;
-        for code in method.code.iter() {
-            code_len += code.body.len(code_len);
-        }
 
         let mut code_array = Vec::new();
 
@@ -820,13 +823,13 @@ impl Generator {
                     $(
                         CodeInstruction::$any_const(expr) => {
                             let index = report_try!(reports;
-                                self.eval_expr_into_index(expr, self::NO_INDEX_FN));
+                                self.eval_expr_into_const_index(expr, self::NO_INDEX_FN));
                             raw::Instruction::$any_const(index)
                         },
                     )*
                     $(
                         CodeInstruction::$class_const(expr) => {
-                            let class_index = report_try!(reports; self.eval_expr_into_index(expr, Some(|this: &mut Generator, s| {
+                            let class_index = report_try!(reports; self.eval_expr_into_const_index(expr, Some(|this: &mut Generator, s| {
                                 let str = this.push_expanded_constant(raw::Constant::Utf8(s));
                                 this.push_expanded_constant(raw::Constant::Class(str))
                             })));
@@ -841,7 +844,8 @@ impl Generator {
                     )*
                     $(
                         CodeInstruction::$jump(expr) => {
-                            let index = CodeIndex(report_try!(reports; self.eval_expr_into_int(expr, "u16", self::into_u16)));
+                            println!("{:?}", code_len);
+                            let index = CodeOffset(report_try!(reports; self.eval_expr_into_int(expr, "u16", self::into_u16)) as i16 - code_len as i16);
                             raw::Instruction::$jump(index)
                         },
                     )*
@@ -852,6 +856,7 @@ impl Generator {
 
         for code in method.code {
             let CodeSection { label, ident, span, body, } = code;
+            let code_index = body.len(code_len);
             code_array.push(code_match!(body;
                 [no_args]
 
@@ -1114,16 +1119,16 @@ impl Generator {
                     },
 
                     CodeInstruction::LoadConstant(expr) => {
-                        let index = report_try!(reports; self.eval_expr_into_index(expr, Some(Generator::push_string_constant)));
+                        let index = report_try!(reports; self.eval_expr_into_const_index(expr, Some(Generator::push_string_constant)));
                         let half = HalfConstantIndex(index.0 as u8); // FIXME
                         raw::Instruction::LoadConstant(half)
                     },
                     CodeInstruction::WideLoadConstant(expr) => {
-                        let index = report_try!(reports; self.eval_expr_into_index(expr, Some(Generator::push_string_constant)));
+                        let index = report_try!(reports; self.eval_expr_into_const_index(expr, Some(Generator::push_string_constant)));
                         raw::Instruction::WideLoadConstant(index)
                     },
                     CodeInstruction::WideLoadWideConstant(expr) => {
-                        let index = report_try!(reports; self.eval_expr_into_index(expr, Some(Generator::push_string_constant)));
+                        let index = report_try!(reports; self.eval_expr_into_const_index(expr, Some(Generator::push_string_constant)));
                         raw::Instruction::WideLoadWideConstant(index)
                     },
 
@@ -1135,14 +1140,40 @@ impl Generator {
 
                     CodeInstruction::LookupSwitch {
                         default_offset, match_table,
-                    } => unimplemented!(),
+                    } => {
+                        let default_index = WideCodeOffset(report_try!(reports; self.eval_expr_into_int(default_offset, "u32", self::into_u32)) as i32 - code_len as i32);
+                        let mut match_table_indices = Vec::new();
+                        for (mtch, offset) in match_table {
+                            let match_index = report_try!(reports; self.eval_expr_into_int(mtch, "i32", self::into_i32));
+                            let offset_index = WideCodeOffset(report_try!(reports; self.eval_expr_into_int(offset, "u32", self::into_u32)) as i32 - code_len as i32);
+                            match_table_indices.push((match_index, offset_index));
+                        }
+                        raw::Instruction::LookupSwitch {
+                            default_offset: default_index,
+                            match_table: match_table_indices,
+                        }
+                    },
 
                     CodeInstruction::TableSwitch {
                         default_offset, match_range, offset_table,
-                    } => unimplemented!(),
+                    } => {
+                        let default_index = WideCodeOffset(report_try!(reports; self.eval_expr_into_int(default_offset, "u32", self::into_u32)) as i32 - code_len as i32);
+                        let match_start = report_try!(reports; self.eval_expr_into_int(match_range.0, "i32", self::into_i32));
+                        let match_end = report_try!(reports; self.eval_expr_into_int(match_range.1, "i32", self::into_i32));
+                        let mut offset_indices = Vec::new();
+                        for offset in offset_table {
+                            let offset_index = WideCodeOffset(report_try!(reports; self.eval_expr_into_int(offset, "u32", self::into_u32)) as i32 - code_len as i32);
+                            offset_indices.push(offset_index);
+                        }
+                        raw::Instruction::TableSwitch {
+                            default_offset: default_index,
+                            match_range: (match_start, match_end),
+                            offset_table: offset_indices,
+                        }
+                    },
 
                     CodeInstruction::InvokeInterface(expr, count) => {
-                        let index = report_try!(reports; self.eval_expr_into_index(expr, self::NO_INDEX_FN));
+                        let index = report_try!(reports; self.eval_expr_into_const_index(expr, self::NO_INDEX_FN));
                         let val = report_try!(reports; self.eval_expr_into_int(count, "u8", self::into_u8));
                         raw::Instruction::InvokeInterface(index, val)
                     },
@@ -1176,7 +1207,7 @@ impl Generator {
                     CodeInstruction::Wide(..) => unimplemented!(), // FIXME: deal with this...
 
                     CodeInstruction::NewRefMultiArray(class, dims) => {
-                        let class_index = report_try!(reports; self.eval_expr_into_index(class, Some(|this: &mut Generator, s| {
+                        let class_index = report_try!(reports; self.eval_expr_into_const_index(class, Some(|this: &mut Generator, s| {
                             let str = this.push_expanded_constant(raw::Constant::Utf8(s));
                             this.push_expanded_constant(raw::Constant::Class(str))
                         })));
@@ -1185,11 +1216,11 @@ impl Generator {
                     },
 
                     CodeInstruction::WideGoto(expr) => {
-                        let index = WideCodeIndex(report_try!(reports; self.eval_expr_into_int(expr, "u32", self::into_u32)));
+                        let index = WideCodeOffset(report_try!(reports; self.eval_expr_into_int(expr, "u32", self::into_u32)) as i32 - code_len as i32);
                         raw::Instruction::WideGoto(index)
                     },
                     CodeInstruction::WideJumpSub(expr) => {
-                        let index = WideCodeIndex(report_try!(reports; self.eval_expr_into_int(expr, "u32", self::into_u32)));
+                        let index = WideCodeOffset(report_try!(reports; self.eval_expr_into_int(expr, "u32", self::into_u32)) as i32 - code_len as i32);
                         raw::Instruction::WideJumpSub(index)
                     },
 
@@ -1198,6 +1229,7 @@ impl Generator {
                     CodeInstruction::ImplementationDefined1 => raw::Instruction::ImplementationDefined1,
                     CodeInstruction::ImplementationDefined2 => raw::Instruction::ImplementationDefined2,
             ));
+            code_len += code_index;
         }
 
         if max_stack.is_some() ||
@@ -1305,7 +1337,7 @@ impl Generator {
         reports.complete(val)
     }
 
-    fn eval_expr_into_index<'a, F>(&'a mut self, expr: Expr, str_to_const: Option<F>) -> Reported<ConstantIndex>
+    fn eval_expr_into_const_index<'a, F>(&'a mut self, expr: Expr, str_to_const: Option<F>) -> Reported<ConstantIndex>
         where F: FnOnce(&'a mut Self, String) -> ConstantIndex {
         let mut reports = Reported::new();
 

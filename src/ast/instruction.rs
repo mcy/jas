@@ -30,14 +30,14 @@ impl Instruction {
             if len < min {
                 report_error!(reports;
                     "not enough arguments for instruction `{}`, expected {}", line.instruction.name, min;
-                    line.instruction.span
+                    line.instruction
                 );
                 false
             } else if len > max {
                 for i in max..len {
                     report_error!(reports;
                         "unexpected argument for instruction `{}`", line.instruction.name;
-                        line.args[i].span()
+                        line.args[i]
                     );
                 }
                 false
@@ -52,7 +52,7 @@ impl Instruction {
             if len < n {
                 report_error!(reports;
                     "not enough arguments for instruction `{}`, expected {}", line.instruction.name, n;
-                    line.instruction.span
+                    line.instruction
                 );
                 false
             } else  {

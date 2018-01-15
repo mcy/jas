@@ -22,6 +22,14 @@ fn into_i16(val: i64) -> Option<i16> {
     }
 }
 
+fn into_i32(val: i64) -> Option<i32> {
+    if val >= (i32::MIN as i64) && val <= (i32::MAX as i64) {
+        Some(val as i32)
+    } else {
+        None
+    }
+}
+
 fn into_u8(val: i64) -> Option<u8> {
     if val >= (u8::MIN as i64) && val <= (u8::MAX as i64) {
         Some(val as u8)

@@ -531,37 +531,37 @@ fn parse_code<R: Read>(bytes: &mut R, len: u32) -> Result<Vec<Instruction>> {
             code::OPCODE_COMPARE_DOUBLE_L => CompareDoubleL,
             code::OPCODE_COMPARE_DOUBLE_G => CompareDoubleG,
 
-            code::OPCODE_IF_INT_EQ_0 => IfIntEq0(bytes.read_code_index()?),
-            code::OPCODE_IF_INT_NE_0 => IfIntNe0(bytes.read_code_index()?),
-            code::OPCODE_IF_INT_LT_0 => IfIntLt0(bytes.read_code_index()?),
-            code::OPCODE_IF_INT_GE_0 => IfIntGe0(bytes.read_code_index()?),
-            code::OPCODE_IF_INT_GT_0 => IfIntGt0(bytes.read_code_index()?),
-            code::OPCODE_IF_INT_LE_0 => IfIntLe0(bytes.read_code_index()?),
+            code::OPCODE_IF_INT_EQ_0 => IfIntEq0(bytes.read_code_offset()?),
+            code::OPCODE_IF_INT_NE_0 => IfIntNe0(bytes.read_code_offset()?),
+            code::OPCODE_IF_INT_LT_0 => IfIntLt0(bytes.read_code_offset()?),
+            code::OPCODE_IF_INT_GE_0 => IfIntGe0(bytes.read_code_offset()?),
+            code::OPCODE_IF_INT_GT_0 => IfIntGt0(bytes.read_code_offset()?),
+            code::OPCODE_IF_INT_LE_0 => IfIntLe0(bytes.read_code_offset()?),
 
-            code::OPCODE_IF_INT_EQ => IfIntEq(bytes.read_code_index()?),
-            code::OPCODE_IF_INT_NE => IfIntNe(bytes.read_code_index()?),
-            code::OPCODE_IF_INT_LT => IfIntLt(bytes.read_code_index()?),
-            code::OPCODE_IF_INT_GE => IfIntGe(bytes.read_code_index()?),
-            code::OPCODE_IF_INT_GT => IfIntGt(bytes.read_code_index()?),
-            code::OPCODE_IF_INT_LE => IfIntLe(bytes.read_code_index()?),
+            code::OPCODE_IF_INT_EQ => IfIntEq(bytes.read_code_offset()?),
+            code::OPCODE_IF_INT_NE => IfIntNe(bytes.read_code_offset()?),
+            code::OPCODE_IF_INT_LT => IfIntLt(bytes.read_code_offset()?),
+            code::OPCODE_IF_INT_GE => IfIntGe(bytes.read_code_offset()?),
+            code::OPCODE_IF_INT_GT => IfIntGt(bytes.read_code_offset()?),
+            code::OPCODE_IF_INT_LE => IfIntLe(bytes.read_code_offset()?),
 
-            code::OPCODE_IF_REF_EQ => IfRefEq(bytes.read_code_index()?),
-            code::OPCODE_IF_REF_NE => IfRefNe(bytes.read_code_index()?),
+            code::OPCODE_IF_REF_EQ => IfRefEq(bytes.read_code_offset()?),
+            code::OPCODE_IF_REF_NE => IfRefNe(bytes.read_code_offset()?),
 
-            code::OPCODE_GOTO => Goto(bytes.read_code_index()?),
-            code::OPCODE_JUMP_SUB => JumpSub(bytes.read_code_index()?),
+            code::OPCODE_GOTO => Goto(bytes.read_code_offset()?),
+            code::OPCODE_JUMP_SUB => JumpSub(bytes.read_code_offset()?),
             code::OPCODE_RET_SUB => RetSub(bytes.read_var_index()?),
 
             code::OPCODE_TABLE_SWITCH => {
                 while bytes.count % 4 != 0 {
                     let _ = bytes.read_u8()?;
                 }
-                let default_offset = bytes.read_wide_code_index()?;
+                let default_offset = bytes.read_wide_code_offset()?;
                 let match_range = (bytes.read_i32::<BigEndian>()?, bytes.read_i32::<BigEndian>()?);
                 let offset_count = (match_range.1 - match_range.0) as usize;
                 let mut offset_table = Vec::with_capacity(offset_count);
                 for _ in 0..offset_count {
-                    offset_table.push(bytes.read_wide_code_index()?);
+                    offset_table.push(bytes.read_wide_code_offset()?);
                 }
                 TableSwitch {
                     default_offset, match_range, offset_table,
@@ -571,11 +571,11 @@ fn parse_code<R: Read>(bytes: &mut R, len: u32) -> Result<Vec<Instruction>> {
                 while bytes.count % 4 != 0 {
                     let _ = bytes.read_u8()?;
                 }
-                let default_offset = bytes.read_wide_code_index()?;
+                let default_offset = bytes.read_wide_code_offset()?;
                 let match_count = bytes.read_u32::<BigEndian>()? as usize;
                 let mut match_table = Vec::with_capacity(match_count);
                 for _ in 0..match_count {
-                    match_table.push((bytes.read_i32::<BigEndian>()?, bytes.read_wide_code_index()?));
+                    match_table.push((bytes.read_i32::<BigEndian>()?, bytes.read_wide_code_offset()?));
                 }
                 LookupSwitch {
                     default_offset, match_table,
@@ -657,10 +657,10 @@ fn parse_code<R: Read>(bytes: &mut R, len: u32) -> Result<Vec<Instruction>> {
             },
 
             code::OPCODE_NEW_REF_MULTI_ARRAY => NewRefMultiArray(bytes.read_constant_index()?, bytes.read_u8()?),
-            code::OPCODE_IF_REF_NULL => IfRefNull(bytes.read_code_index()?),
-            code::OPCODE_IF_REF_NON_NULL => IfRefNonNull(bytes.read_code_index()?),
-            code::OPCODE_WIDE_GOTO => WideGoto(bytes.read_wide_code_index()?),
-            code::OPCODE_WIDE_JUMP_SUB => WideJumpSub(bytes.read_wide_code_index()?),
+            code::OPCODE_IF_REF_NULL => IfRefNull(bytes.read_code_offset()?),
+            code::OPCODE_IF_REF_NON_NULL => IfRefNonNull(bytes.read_code_offset()?),
+            code::OPCODE_WIDE_GOTO => WideGoto(bytes.read_wide_code_offset()?),
+            code::OPCODE_WIDE_JUMP_SUB => WideJumpSub(bytes.read_wide_code_offset()?),
 
 
             code::OPCODE_BREAKPOINT => Breakpoint,
@@ -923,37 +923,37 @@ fn emit_code<W: Write>(instructions: &Vec<Instruction>, out: &mut W) -> Result<(
                 out.write_i8(byte)?;  
             },
 
-            IfIntEq0(ref index) => out.write_code_index(index)?,
-            IfIntNe0(ref index) => out.write_code_index(index)?,
-            IfIntLt0(ref index) => out.write_code_index(index)?,
-            IfIntGe0(ref index) => out.write_code_index(index)?,
-            IfIntGt0(ref index) => out.write_code_index(index)?,
-            IfIntLe0(ref index) => out.write_code_index(index)?,
+            IfIntEq0(ref index) => out.write_code_offset(index)?,
+            IfIntNe0(ref index) => out.write_code_offset(index)?,
+            IfIntLt0(ref index) => out.write_code_offset(index)?,
+            IfIntGe0(ref index) => out.write_code_offset(index)?,
+            IfIntGt0(ref index) => out.write_code_offset(index)?,
+            IfIntLe0(ref index) => out.write_code_offset(index)?,
 
-            IfIntEq(ref index) => out.write_code_index(index)?,
-            IfIntNe(ref index) => out.write_code_index(index)?,
-            IfIntLt(ref index) => out.write_code_index(index)?,
-            IfIntGe(ref index) => out.write_code_index(index)?,
-            IfIntGt(ref index) => out.write_code_index(index)?,
-            IfIntLe(ref index) => out.write_code_index(index)?,
+            IfIntEq(ref index) => out.write_code_offset(index)?,
+            IfIntNe(ref index) => out.write_code_offset(index)?,
+            IfIntLt(ref index) => out.write_code_offset(index)?,
+            IfIntGe(ref index) => out.write_code_offset(index)?,
+            IfIntGt(ref index) => out.write_code_offset(index)?,
+            IfIntLe(ref index) => out.write_code_offset(index)?,
 
-            IfRefEq(ref index) => out.write_code_index(index)?,
-            IfRefNe(ref index) => out.write_code_index(index)?,
+            IfRefEq(ref index) => out.write_code_offset(index)?,
+            IfRefNe(ref index) => out.write_code_offset(index)?,
             
-            Goto(ref index) => out.write_code_index(&index)?,
-            JumpSub(ref index) => out.write_code_index(index)?,
+            Goto(ref index) => out.write_code_offset(&index)?,
+            JumpSub(ref index) => out.write_code_offset(index)?,
             RetSub(ref index) => out.write_var_index(index)?,
             
             TableSwitch { ref default_offset, ref match_range, ref offset_table, } => {
                 while out.count % 4 != 0 {
                     out.write_u8(0)?;
                 }
-                out.write_wide_code_index(default_offset)?;
+                out.write_wide_code_offset(default_offset)?;
                 out.write_i32::<BigEndian>(match_range.0)?;
                 out.write_i32::<BigEndian>(match_range.1)?;
                 
                 for ref offset in offset_table.iter() {
-                    out.write_wide_code_index(offset)?;
+                    out.write_wide_code_offset(offset)?;
                 }
             },
 
@@ -961,11 +961,11 @@ fn emit_code<W: Write>(instructions: &Vec<Instruction>, out: &mut W) -> Result<(
                 while out.count % 4 != 0 {
                     out.write_u8(0)?;
                 }
-                out.write_wide_code_index(default_offset)?;
+                out.write_wide_code_offset(default_offset)?;
                 out.write_u32::<BigEndian>(match_table.len() as u32)?;
                 for &(index, ref offset) in match_table.iter() {
                     out.write_i32::<BigEndian>(index)?;
-                    out.write_wide_code_index(offset)?;
+                    out.write_wide_code_offset(offset)?;
                 }
             }
 
@@ -1024,10 +1024,10 @@ fn emit_code<W: Write>(instructions: &Vec<Instruction>, out: &mut W) -> Result<(
                 out.write_constant_index(index)?;
                 out.write_u8(dims)?;
             }
-            IfRefNull(ref index) => out.write_code_index(index)?,
-            IfRefNonNull(ref index) => out.write_code_index(index)?,
-            WideGoto(ref index) => out.write_wide_code_index(index)?,
-            WideJumpSub(ref index) => out.write_wide_code_index(index)?,
+            IfRefNull(ref index) => out.write_code_offset(index)?,
+            IfRefNonNull(ref index) => out.write_code_offset(index)?,
+            WideGoto(ref index) => out.write_wide_code_offset(index)?,
+            WideJumpSub(ref index) => out.write_wide_code_offset(index)?,
 
             _ => {},
         };

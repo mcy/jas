@@ -198,36 +198,36 @@ pub enum Instruction {
     CompareDoubleL,
     CompareDoubleG,
     
-    IfIntEq0(CodeIndex),
-    IfIntNe0(CodeIndex),
-    IfIntLt0(CodeIndex),
-    IfIntGe0(CodeIndex),
-    IfIntGt0(CodeIndex),
-    IfIntLe0(CodeIndex),
+    IfIntEq0(CodeOffset),
+    IfIntNe0(CodeOffset),
+    IfIntLt0(CodeOffset),
+    IfIntGe0(CodeOffset),
+    IfIntGt0(CodeOffset),
+    IfIntLe0(CodeOffset),
     
-    IfIntEq(CodeIndex),
-    IfIntNe(CodeIndex),
-    IfIntLt(CodeIndex),
-    IfIntGe(CodeIndex),
-    IfIntGt(CodeIndex),
-    IfIntLe(CodeIndex),
+    IfIntEq(CodeOffset),
+    IfIntNe(CodeOffset),
+    IfIntLt(CodeOffset),
+    IfIntGe(CodeOffset),
+    IfIntGt(CodeOffset),
+    IfIntLe(CodeOffset),
     
-    IfRefEq(CodeIndex),
-    IfRefNe(CodeIndex),
+    IfRefEq(CodeOffset),
+    IfRefNe(CodeOffset),
     
-    Goto(CodeIndex),
-    JumpSub(CodeIndex),
+    Goto(CodeOffset),
+    JumpSub(CodeOffset),
     RetSub(VarIndex),
 
     LookupSwitch {
-        default_offset: WideCodeIndex,
-        match_table: Vec<(i32, WideCodeIndex)>
+        default_offset: WideCodeOffset,
+        match_table: Vec<(i32, WideCodeOffset)>
     },
 
     TableSwitch {
-        default_offset: WideCodeIndex,
+        default_offset: WideCodeOffset,
         match_range: (i32, i32),
-        offset_table: Vec<WideCodeIndex>,
+        offset_table: Vec<WideCodeOffset>,
     },
     
     ReturnInt,
@@ -265,10 +265,10 @@ pub enum Instruction {
     Wide(WideInstruction),
     
     NewRefMultiArray(ConstantIndex, u8),
-    IfRefNull(CodeIndex),
-    IfRefNonNull(CodeIndex),
-    WideGoto(WideCodeIndex),
-    WideJumpSub(WideCodeIndex),
+    IfRefNull(CodeOffset),
+    IfRefNonNull(CodeOffset),
+    WideGoto(WideCodeOffset),
+    WideJumpSub(WideCodeOffset),
     
     
     Breakpoint,

@@ -39,6 +39,24 @@ impl WideCodeIndex {
 }
 
 #[derive(Clone, Debug)]
+pub struct CodeOffset(pub i16);
+
+impl CodeOffset {
+    pub fn len() -> usize {
+        2
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct WideCodeOffset(pub i32);
+
+impl WideCodeOffset {
+    pub fn len() -> usize {
+        4
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct VarIndex(pub u8);
 
 impl VarIndex {
@@ -66,6 +84,10 @@ pub trait ReadIndexExt: io::Read {
 
     fn read_wide_code_index(&mut self) -> io::Result<WideCodeIndex>;
 
+    fn read_code_offset(&mut self) -> io::Result<CodeOffset>;
+
+    fn read_wide_code_offset(&mut self) -> io::Result<WideCodeOffset>;
+
     fn read_var_index(&mut self) -> io::Result<VarIndex>;
 
     fn read_wide_var_index(&mut self) -> io::Result<WideVarIndex>;
@@ -89,6 +111,14 @@ impl<R> ReadIndexExt for R where R: io::Read  {
         Ok(WideCodeIndex(self.read_u32::<BigEndian>()?))
     }
 
+    fn read_code_offset(&mut self) -> io::Result<CodeOffset> {
+        Ok(CodeOffset(self.read_i16::<BigEndian>()?))
+    }
+
+    fn read_wide_code_offset(&mut self) -> io::Result<WideCodeOffset> {
+        Ok(WideCodeOffset(self.read_i32::<BigEndian>()?))
+    }
+
     fn read_var_index(&mut self) -> io::Result<VarIndex> {
         Ok(VarIndex(self.read_u8()?))
     }
@@ -107,6 +137,10 @@ pub trait WriteIndexExt: io::Write {
     fn write_code_index(&mut self, index: &CodeIndex) -> io::Result<()>;
 
     fn write_wide_code_index(&mut self, index: &WideCodeIndex) -> io::Result<()>;
+
+    fn write_code_offset(&mut self, index: &CodeOffset) -> io::Result<()>;
+
+    fn write_wide_code_offset(&mut self, index: &WideCodeOffset) -> io::Result<()>;
 
     fn write_var_index(&mut self, index: &VarIndex) -> io::Result<()>;
 
@@ -129,6 +163,14 @@ impl<W> WriteIndexExt for W where W: io::Write  {
 
     fn write_wide_code_index(&mut self, index: &WideCodeIndex) -> io::Result<()> {
         self.write_u32::<BigEndian>(index.0)
+    }
+
+    fn write_code_offset(&mut self, index: &CodeOffset) -> io::Result<()> {
+        self.write_i16::<BigEndian>(index.0)
+    }
+
+    fn write_wide_code_offset(&mut self, index: &WideCodeOffset) -> io::Result<()> {
+        self.write_i32::<BigEndian>(index.0)
     }
 
     fn write_var_index(&mut self, index: &VarIndex) -> io::Result<()> {
