@@ -181,6 +181,8 @@ impl Instruction {
 
             inst::CONST_VALUE => op_1!(MetaI::ConstantValue, Meta),
 
+            inst::SOURCE => op_1!(MetaI::Source, Meta),
+
             inst::ATTR => op_2!(MetaI::Attr, Meta),
 
             inst::CLASS_REF => op_1!(ConstantI::ClassRef, Constant),
@@ -626,6 +628,8 @@ pub enum MetaInstruction {
     },
 
     ConstantValue(Expr),
+
+    Source(Expr),
 
     Attr(Expr, Expr),
 }

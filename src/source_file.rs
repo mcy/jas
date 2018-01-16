@@ -1,3 +1,8 @@
+use std::io;
+use std::io::prelude::*;
+use std::fs;
+use std::path;
+
 use std::rc::Rc;
 
 #[derive(Clone)]
@@ -17,6 +22,14 @@ impl fmt::Debug for SourceFile {
 }
 
 impl SourceFile {
+
+    pub fn from_file<P: AsRef<path::Path>>(path: P) -> io::Result<SourceFile> {
+        let name = path.as_ref().to_string_lossy().into_owned();
+        let mut file = fs::OpenOptions::new().read(true).open(path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        Ok(SourceFile::from_str(name, &contents))
+    }
 
     pub fn from_str(path: String, source: &str) -> SourceFile {
         SourceFile {

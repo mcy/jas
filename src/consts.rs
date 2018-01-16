@@ -18,6 +18,8 @@ pub mod instructions {
 
     pub const CONST_VALUE: &'static str = "const_val";
 
+    pub const SOURCE: &'static str = "source";
+
     pub const ATTR: &'static str = "attr";
 
     // constants

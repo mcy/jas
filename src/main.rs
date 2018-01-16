@@ -17,23 +17,29 @@ use phase::Phase;
 
 use classfile::raw::io;
 
+use std::env;
 use std::fs;
 use std::path;
+use std::io as s_io;
 use std::io::prelude::*;
 use std::rc::Rc;
 
 fn main() {
 
-    let src = vec![Rc::new(source_file::SourceFile::from_str("loops.j".into(), include_str!("loops.j").into()))];
+    for arg in env::args().into_iter().skip(1) {
+        eprintln!("assembling: {}", arg);
+        assemble(arg).unwrap();
+    }
+}
 
-    let tokens = lexer::Lexer::run_and_error(src);
+fn assemble<P: AsRef<path::Path>>(path: P) -> s_io::Result<()> {
+    let source = Rc::new(source_file::SourceFile::from_file(path)?);
+    let tokens = lexer::Lexer::run_and_error(vec![source]);
     let ast = ast::Parser::run_and_error(tokens);
     let sections = codegen::ClassSection::run_and_error(ast);
     let classes = codegen::Generator::run_and_error(sections);
 
     for (i, (path, class)) in classes.into_iter().enumerate() {
-
-        println!("{:?}", class);
 
         let path = path.unwrap_or_else(|| vec![format!("unknown{}.class", i)]);
 
@@ -45,7 +51,9 @@ fn main() {
             fs::create_dir_all(path);
         }
 
-        let mut file = fs::File::create(buf).unwrap();
-        io::emit_class(&class, &mut file).unwrap();
+        let mut file = fs::File::create(buf)?;
+        io::emit_class(&class, &mut file)?;
     }
+
+    Ok(())
 }

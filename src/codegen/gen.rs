@@ -100,12 +100,7 @@ impl Generator {
     }
 
     pub fn file_name(&mut self) -> Option<Vec<String>> {
-        if let Some(&raw::Constant::Class(ref class)) = {
-
-            let c = self.get_constant(self.this_class.as_ref().unwrap().clone());
-            println!("{:?}", c);
-            c
-        } {
+        if let Some(&raw::Constant::Class(ref class)) = self.get_constant(self.this_class.as_ref().unwrap().clone()) {
             if let Some(&raw::Constant::Utf8(ref str)) = self.get_constant(class.clone()) {
                 Some(format!("{}.class", str).split("/").map(Into::into).collect())
             } else {
@@ -479,10 +474,8 @@ impl Generator {
                         report_error!(reports; "duplicate `version` instruction"; span);
                     } else {
                         // FIXME: use something reasonable
-                        println!("{:?}", major);
                         let minor_val = report_try!(reports; self.eval_expr_into_const_index(minor, self::NO_INDEX_FN));
                         let major_val = report_try!(reports; self.eval_expr_into_const_index(major, self::NO_INDEX_FN));
-                        println!("{:?}", major_val);
                         self.minor_major_version = Some((minor_val.0, major_val.0));
                     }
                 },
@@ -528,6 +521,11 @@ impl Generator {
                 MetaInstruction::ConstantValue(..) => {
                     report_error!(reports; "`const_val` may only appear after a `field` instruction"; span);
                 },
+                MetaInstruction::Source(expr) => {
+                    let index = report_try!(reports; self.eval_expr_into_const_index(expr, Some(Generator::push_string_constant)));
+                    let name = self.push_string_constant(flags::attribute::ATTR_SOURCE_FILE.into());
+                    self.attributes.push(raw::Attribute { name, info: raw::AttributeInfo::SourceFile(index)})
+                }
                 MetaInstruction::Attr(name, data) => {
                     // fixme: care about what "index" points to
                     let name_index = report_try!(reports; self.eval_expr_into_const_index(name, Some(Generator::push_string_constant)));
@@ -631,6 +629,9 @@ impl Generator {
                     let index = report_try!(reports; self.eval_expr_into_const_index(expr, self::NO_INDEX_FN));
                     let name = self.push_string_constant(flags::attribute::ATTR_CONSTANT_VALUE.into());
                     attrs.push(raw::Attribute { name, info: raw::AttributeInfo::ConstantValue(index)})
+                },
+                MetaInstruction::Source(..) => {
+                    report_error!(reports; "`source` may only appear after a `class` instruction"; span);
                 },
                 MetaInstruction::Attr(name, data) => {
                     // fixme: care about what "index" points to
@@ -773,6 +774,9 @@ impl Generator {
                 MetaInstruction::ConstantValue(..) => {
                     report_error!(reports; "`const_val` may only appear after a `class` instruction"; span);
                 },
+                MetaInstruction::Source(..) => {
+                    report_error!(reports; "`source` may only appear after a `class` instruction"; span);
+                },
                 MetaInstruction::Attr(name, data) => {
                     // fixme: care about what "index" points to
                     let name_index = report_try!(reports; self.eval_expr_into_const_index(name, Some(Generator::push_string_constant)));
@@ -844,7 +848,6 @@ impl Generator {
                     )*
                     $(
                         CodeInstruction::$jump(expr) => {
-                            println!("{:?}", code_len);
                             let index = CodeOffset(report_try!(reports; self.eval_expr_into_int(expr, "u16", self::into_u16)) as i16 - code_len as i16);
                             raw::Instruction::$jump(index)
                         },
