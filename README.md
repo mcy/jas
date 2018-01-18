@@ -101,5 +101,6 @@ literal
 
 Most instructions are code instructions. We use the same mnemonics
 for them as Sun did, which can be found
- [here](https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-6.html). 
+ [here](https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-6.html).
+ 
 

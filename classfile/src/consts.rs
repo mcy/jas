@@ -242,6 +242,32 @@ pub mod attribute {
     pub const ATTR_RUNTIME_INVISIBLE_PARAMETER_ANNOTATIONS: &'static str = "RuntimeInvisibleParameterAnnotations";
     pub const ATTR_ANNOTATION_DEFAULT: &'static str = "AnnotationDefault";
     pub const ATTR_BOOTSTRAP_METHODS: &'static str = "BootstrapMethods";
+
+    pub const STACK_MAP_SAME_OFFSET: u8 = 0;
+    pub const STACK_MAP_SAME_MIN: u8 = 0;
+    pub const STACK_MAP_SAME_MAX: u8 = 63;
+    pub const STACK_MAP_SAME_EXT: u8 = 251;
+    pub const STACK_MAP_SINGLE_STACK_OFFSET: u8 = 64;
+    pub const STACK_MAP_SINGLE_STACK_MIN: u8 = 64;
+    pub const STACK_MAP_SINGLE_STACK_MAX: u8 = 127;
+    pub const STACK_MAP_SINGLE_STACK_EXT: u8 = 247;
+    pub const STACK_MAP_CHOP_3: u8 = 248;
+    pub const STACK_MAP_CHOP_2: u8 = 249;
+    pub const STACK_MAP_CHOP_1: u8 = 250;
+    pub const STACK_MAP_APPEND_3: u8 = 252;
+    pub const STACK_MAP_APPEND_2: u8 = 253;
+    pub const STACK_MAP_APPEND_1: u8 = 254;
+    pub const STACK_MAP_FULL: u8 = 255;
+
+    pub const VTYPE_TOP: u8 = 0;
+    pub const VTYPE_INT: u8 = 1;
+    pub const VTYPE_FLOAT: u8 = 2;
+    pub const VTYPE_LONG: u8 = 4; // [sic]
+    pub const VTYPE_DOUBLE: u8 = 3;
+    pub const VTYPE_NULL: u8 = 5;
+    pub const VTYPE_UNINIT_THIS: u8 = 6;
+    pub const VTYPE_OBJ: u8 = 7;
+    pub const VTYPE_UNINIT: u8 = 8;
 }
 
 pub mod code {
@@ -480,7 +506,7 @@ pub mod code {
     pub const OPCODE_INVOKE_SPECIAL: u8 = 0xb7;
     pub const OPCODE_INVOKE_STATIC: u8 = 0xb8;
     pub const OPCODE_INVOKE_INTERFACE: u8 = 0xb9;
-    pub const OPCODE_INVOKE_DYNAMIC: u8 = 0xc0;
+    pub const OPCODE_INVOKE_DYNAMIC: u8 = 0xba;
 
     pub const OPCODE_NEW: u8 = 0xbb;
     pub const OPCODE_NEW_PRIMITIVE_ARRAY: u8 = 0xbc;

@@ -15,6 +15,7 @@ use base64;
 use std::collections::HashMap;
 use std::mem;
 use std::{u8, u16, u32, u64, i8, i16, i32, f32};
+use std::vec;
 
 #[derive(Debug)]
 pub struct Generator {
@@ -447,8 +448,18 @@ impl Generator {
                     self.eval_expr_into_const_index(expr, Some(Generator::push_string_constant)));
                 raw::Constant::MethodType(index)
             },
-            ConstantInstruction::DynamicTarget { .. } => {
-                fatal_error!(reports; "dynamic_target is not currently supported"; span)
+            ConstantInstruction::DynamicTarget { bootstrap_method, name, descriptor } => {
+
+                let index = report_try!(reports; self.eval_expr_into_const_index(bootstrap_method, self::NO_INDEX_FN));
+                let name_and_type = if let Some(descriptor) = descriptor {
+                    let name_index = report_try!(reports; self.eval_expr_into_const_index(name, Some(Generator::push_string_constant)));
+                    let desc_index = report_try!(reports; self.eval_expr_into_const_index(descriptor, Some(Generator::push_string_constant)));
+                    self.push_expanded_constant(raw::Constant::Signature { name: name_index, descriptor: desc_index, })
+                } else {
+                    report_try!(reports; self.eval_expr_into_const_index(name, self::NO_INDEX_FN))
+                };
+
+                raw::Constant::InvokeDynamic { bootstrap_method: index, signature: name_and_type }
             },
         };
 
@@ -458,8 +469,9 @@ impl Generator {
     pub fn expand_top_level(&mut self, metas: Vec<MetaSection>) -> Reported<()> {
         let mut reports = Reported::new();
 
-        for meta in metas.into_iter() {
+        let mut bootstrap_methods = Vec::new();
 
+        for meta in metas.into_iter() {
             let MetaSection { label, ident, span, body } = meta;
             match body {
                 MetaInstruction::Impl(exprs) => for expr in exprs {
@@ -524,8 +536,20 @@ impl Generator {
                 MetaInstruction::Source(expr) => {
                     let index = report_try!(reports; self.eval_expr_into_const_index(expr, Some(Generator::push_string_constant)));
                     let name = self.push_string_constant(flags::attribute::ATTR_SOURCE_FILE.into());
-                    self.attributes.push(raw::Attribute { name, info: raw::AttributeInfo::SourceFile(index)})
+                    self.attributes.push(raw::Attribute { name, info: raw::AttributeInfo::SourceFile(index), })
                 }
+                MetaInstruction::Bootstrap(mut exprs) => {
+                    let mut iter = exprs.into_iter();
+                    let handle = report_try!(reports; self.eval_expr_into_const_index(iter.next().unwrap(), self::NO_INDEX_FN));
+                    let mut args = Vec::new();
+                    for expr in iter {
+                        args.push(report_try!(reports; self.eval_expr_into_const_index(expr, self::NO_INDEX_FN)));
+                    }
+                    bootstrap_methods.push(raw::BootstrapMethod { method: handle, arguments: args });
+                },
+                MetaInstruction::StackMap(..) => {
+                    report_error!(reports; "`stack_map` may only appear after a `method` instruction"; span);
+                },
                 MetaInstruction::Attr(name, data) => {
                     // fixme: care about what "index" points to
                     let name_index = report_try!(reports; self.eval_expr_into_const_index(name, Some(Generator::push_string_constant)));
@@ -546,6 +570,11 @@ impl Generator {
                     }
                 },
             }
+        }
+
+        if !bootstrap_methods.is_empty() {
+            let name = self.push_string_constant(flags::attribute::ATTR_BOOTSTRAP_METHODS.into());
+            self.attributes.push(raw::Attribute { name, info: raw::AttributeInfo::BootstrapMethods(bootstrap_methods), });
         }
 
         reports.complete(())
@@ -633,6 +662,12 @@ impl Generator {
                 MetaInstruction::Source(..) => {
                     report_error!(reports; "`source` may only appear after a `class` instruction"; span);
                 },
+                MetaInstruction::Bootstrap(..) => {
+                    report_error!(reports; "`bootstrap` may only appear after a `class` instruction"; span);
+                },
+                MetaInstruction::StackMap(..) => {
+                    report_error!(reports; "`stack_map` may only appear after a `method` instruction"; span);
+                },
                 MetaInstruction::Attr(name, data) => {
                     // fixme: care about what "index" points to
                     let name_index = report_try!(reports; self.eval_expr_into_const_index(name, Some(Generator::push_string_constant)));
@@ -694,6 +729,8 @@ impl Generator {
         let mut max_stack = None;
         let mut max_locals = None;
         let mut exceptions = Vec::new();
+
+        let mut stack_map_table = Vec::new();
 
         for meta in method.meta.into_iter() {
             let MetaSection { label, ident, span, body } = meta;
@@ -777,6 +814,226 @@ impl Generator {
                 MetaInstruction::Source(..) => {
                     report_error!(reports; "`source` may only appear after a `class` instruction"; span);
                 },
+                MetaInstruction::Bootstrap(..) => {
+                    report_error!(reports; "`bootstrap` may only appear after a `class` instruction"; span);
+                },
+                MetaInstruction::StackMap(exprs) => {
+                    let mut iter = exprs.into_iter();
+                    let frame_type = iter.next().unwrap();
+                    let offset = CodeIndex(report_try!(reports; self.eval_expr_into_const_index(iter.next().unwrap(), self::NO_INDEX_FN)).0);
+                    if let Expr::Ref(ident) = frame_type {
+                        fn parse_vty<I: Iterator<Item = Expr>, T>(this: &mut Generator, iter: &mut I, reports: &mut Reported<T>, span: &Span) -> Option<raw::VerificationType> {
+                            if let Some(Expr::Ref(ident)) = iter.next() {
+                                match ident.name.as_str() {
+                                    special::VTYPE_TOP => Some(raw::VerificationType::Top),
+                                    special::VTYPE_INT => Some(raw::VerificationType::Int),
+                                    special::VTYPE_FLOAT => Some(raw::VerificationType::Float),
+                                    special::VTYPE_LONG => Some(raw::VerificationType::Long),
+                                    special::VTYPE_DOUBLE => Some(raw::VerificationType::Double),
+                                    special::VTYPE_NULL => Some(raw::VerificationType::Null),
+                                    special::VTYPE_UNINIT_THIS => Some(raw::VerificationType::UninitializedThis),
+                                    special::VTYPE_OBJ => {
+                                        if let Some(next) = iter.next() {
+                                            let ty = reports.merge(this.eval_expr_into_const_index(next, Some(|this: &mut Generator, s| {
+                                                let str = this.push_expanded_constant(raw::Constant::Utf8(s));
+                                                this.push_expanded_constant(raw::Constant::Class(str))
+                                            })))?;
+                                            Some(raw::VerificationType::Object(ty))
+                                        } else {
+                                            report_error!(reports; "expected class ref"; ident);
+                                            None
+                                        }
+                                    }
+                                    special::VTYPE_UNINIT => {
+                                        if let Some(next) = iter.next() {
+                                            let index = CodeIndex(reports.merge(this.eval_expr_into_const_index(next, self::NO_INDEX_FN))?.0);
+                                            Some(raw::VerificationType::Uninitialized(index))
+                                        } else {
+                                            report_error!(reports; "expected class ref"; ident);
+                                            None
+                                        }
+                                    }
+                                    other => {
+                                        report_error!(reports; "expected verification type, found `{}`", ident.name; ident);
+                                        None
+                                    }
+                                }
+                            } else {
+                                report_error!(reports; "expected identifier"; span);
+                                None
+                            }
+                        }
+                        // FIXME: everywhere here, use something other than eval_exper_into_const_index
+                        match ident.name.as_str() {
+                            special::STACK_MAP_SAME => {
+                                if offset.0 > flags::attribute::STACK_MAP_SAME_MAX as u16 {
+                                    report_error!(reports; "expected integer at most {}, found {}",
+                                        flags::attribute::STACK_MAP_SAME_MAX, offset.0 ; span)
+                                }
+
+                                stack_map_table.push(raw::StackMapFrame::Same(offset));
+
+                                for extra in iter {
+                                    report_error!(reports; "unexpected argument"; extra);
+                                }
+                            },
+                            special::STACK_MAP_SAME_EXT => {
+                                stack_map_table.push(raw::StackMapFrame::SameExt(offset));
+
+                                for extra in iter {
+                                    report_error!(reports; "unexpected argument"; extra);
+                                }
+                            },
+                            special::STACK_MAP_SINGLE_STACK => {
+                                if offset.0 > (flags::attribute::STACK_MAP_SAME_MAX - flags::attribute::STACK_MAP_SAME_MIN) as u16 {
+                                    report_error!(reports; "expected integer at most {}, found {}",
+                                        flags::attribute::STACK_MAP_SAME_MAX - flags::attribute::STACK_MAP_SAME_MIN, offset.0 ; span)
+                                }
+                                if let Some(ty) = parse_vty(self, &mut iter, &mut reports, &ident.span) {
+                                    stack_map_table.push(raw::StackMapFrame::SingleStack(offset, ty));
+
+                                    for extra in iter {
+                                        report_error!(reports; "unexpected argument"; extra);
+                                    }
+                                }
+                            },
+                            special::STACK_MAP_SINGLE_STACK_EXT => {
+                                if let Some(ty) = parse_vty(self, &mut iter, &mut reports, &ident.span) {
+                                    stack_map_table.push(raw::StackMapFrame::SingleStackExt(offset, ty));
+
+                                    for extra in iter {
+                                        report_error!(reports; "unexpected argument"; extra);
+                                    }
+                                }
+                            },
+                            special::STACK_MAP_CHOP_1 => {
+                                stack_map_table.push(raw::StackMapFrame::Chop1(offset));
+
+                                for extra in iter {
+                                    report_error!(reports; "unexpected argument"; extra);
+                                }
+                            },
+                            special::STACK_MAP_CHOP_2 => {
+                                stack_map_table.push(raw::StackMapFrame::Chop2(offset));
+
+                                for extra in iter {
+                                    report_error!(reports; "unexpected argument"; extra);
+                                }
+                            },
+                            special::STACK_MAP_CHOP_3 => {
+                                stack_map_table.push(raw::StackMapFrame::Chop3(offset));
+
+                                for extra in iter {
+                                    report_error!(reports; "unexpected argument"; extra);
+                                }
+                            },
+                            special::STACK_MAP_APPEND_1 => {
+                                let arg1 = parse_vty(self, &mut iter, &mut reports, &ident.span);
+                                if arg1.is_some() {
+                                    stack_map_table.push(raw::StackMapFrame::Append1(offset, arg1.unwrap()));
+
+                                    for extra in iter {
+                                        report_error!(reports; "unexpected argument"; extra);
+                                    }
+                                }
+                            },
+                            special::STACK_MAP_APPEND_2 => {
+                                let arg1 = parse_vty(self, &mut iter, &mut reports, &ident.span);
+                                let arg2 = parse_vty(self, &mut iter, &mut reports, &ident.span);
+                                if arg1.is_some() && arg2.is_some() {
+                                    stack_map_table.push(raw::StackMapFrame::Append2(offset, arg1.unwrap(), arg2.unwrap()));
+
+                                    for extra in iter {
+                                        report_error!(reports; "unexpected argument"; extra);
+                                    }
+                                }
+                            },
+                            special::STACK_MAP_APPEND_3 => {
+                                let arg1 = parse_vty(self, &mut iter, &mut reports, &ident.span);
+                                let arg2 = parse_vty(self, &mut iter, &mut reports, &ident.span);
+                                let arg3 = parse_vty(self, &mut iter, &mut reports, &ident.span);
+                                if arg1.is_some() && arg2.is_some() && arg3.is_some() {
+                                    stack_map_table.push(raw::StackMapFrame::Append3(offset, arg1.unwrap(), arg2.unwrap(), arg3.unwrap()));
+
+                                    for extra in iter {
+                                        report_error!(reports; "unexpected argument"; extra);
+                                    }
+                                }
+                            },
+                            special::STACK_MAP_FULL => {
+                                // everything about this is horrible.
+                                // but this attribute is stupid anyways so I don't care
+                                let mut stack = Vec::new();
+                                let mut locals = Vec::new();
+                                #[derive(PartialEq, Eq)]
+                                enum Mode { Stack, Locals };
+                                let mut mode = None;
+                                let mut iter = iter.peekable();
+                                while let Some(expr) = { iter.peek().cloned() } { // FIXME: get rid of this clone
+                                    match mode {
+                                        None => {
+                                            match expr {
+                                                Expr::Ref(ref ident) => match ident.name.as_str() {
+                                                    // FIXME: other instructons maybe?
+                                                    consts::instructions::STACK => mode = {
+                                                        let _ = iter.next();
+                                                        Some(Mode::Stack)
+                                                    },
+                                                    consts::instructions::LOCALS => mode = {
+                                                        let _ = iter.next();
+                                                        Some(Mode::Locals)
+                                                    },
+                                                    ref other => report_error!(reports; "expected `stack` or `locals`, found {}", other; ident),
+                                                }
+                                                ref other => report_error!(reports; "expected identifier"; ident),
+                                            }
+                                        },
+                                        Some(Mode::Stack) => {
+                                            match expr {
+                                                Expr::Ref(ref ident) if ident.name == consts::instructions::STACK => {
+                                                    let _ = iter.next();
+                                                    mode = Some(Mode::Stack)
+                                                },
+                                                Expr::Ref(ref ident) if ident.name == consts::instructions::LOCALS => {
+                                                    let _ = iter.next();
+                                                    mode = Some(Mode::Stack)
+                                                },
+                                                ref other => {
+                                                    if let Some(ty) = parse_vty(self, &mut iter, &mut reports, &ident.span) {
+                                                        stack.push(ty);
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        Some(Mode::Locals) => {
+                                            match expr {
+                                                Expr::Ref(ref ident) if ident.name == consts::instructions::STACK => {
+                                                    let _ = iter.next();
+                                                    mode = Some(Mode::Stack)
+                                                },
+                                                Expr::Ref(ref ident) if ident.name == consts::instructions::LOCALS => {
+                                                    let _ = iter.next();
+                                                    mode = Some(Mode::Stack)
+                                                },
+                                                ref other => {
+                                                    if let Some(ty) = parse_vty(self, &mut iter, &mut reports, &ident.span) {
+                                                        locals.push(ty);
+                                                    }
+                                                }
+                                            }
+                                        },
+                                    }
+                                }
+                                stack_map_table.push(raw::StackMapFrame::Full {
+                                    offset, stack, locals,
+                                })
+                            }
+                            other => report_error!(reports; "expected `stack_map_frame` type, found `{}`", other; ident)
+                        }
+                    } else {
+                        report_error!(reports; "expected identifier"; frame_type);
+                    }
+                }
                 MetaInstruction::Attr(name, data) => {
                     // fixme: care about what "index" points to
                     let name_index = report_try!(reports; self.eval_expr_into_const_index(name, Some(Generator::push_string_constant)));
@@ -1259,6 +1516,11 @@ impl Generator {
         } else {
             flags::method::Flags::new()
         };
+
+        if !stack_map_table.is_empty() {
+            let name_index = self.push_string_constant(flags::attribute::ATTR_STACK_MAP_TABLE.into());
+            self.attributes.push(raw::Attribute { name: name_index, info: raw::AttributeInfo::StackMapTable(stack_map_table), })
+        }
 
         reports.complete(raw::Method {
             flags, name, descriptor, attributes: attrs,

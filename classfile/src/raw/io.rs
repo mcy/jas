@@ -212,6 +212,71 @@ fn parse_attribute<R: Read>(bytes: &mut R, index: u16, constants: &Vec<Constant>
             }
         },
         /*"StackMapTable" => unimplemented!(),*/
+        attr::ATTR_STACK_MAP_TABLE => {
+            fn parse_ty<R: Read>(bytes: &mut R) -> Result<VerificationType> {
+                let tag = bytes.read_u8()?;
+                Ok(match tag {
+                    attr::VTYPE_TOP => VerificationType::Top,
+                    attr::VTYPE_INT => VerificationType::Int,
+                    attr::VTYPE_FLOAT => VerificationType::Float,
+                    attr::VTYPE_LONG => VerificationType::Long,
+                    attr::VTYPE_DOUBLE => VerificationType::Double,
+                    attr::VTYPE_NULL => VerificationType::Null,
+                    attr::VTYPE_OBJ => VerificationType::Object(bytes.read_constant_index()?),
+                    attr::VTYPE_UNINIT => VerificationType::Uninitialized(bytes.read_code_index()?),
+                    attr::VTYPE_UNINIT_THIS => VerificationType::UninitializedThis,
+                    _ => Err(invalid_data!("unknown verification type {}", tag))?,
+                })
+            }
+            let len = bytes.read_u16::<BigEndian>()?;
+            let mut frames = Vec::with_capacity(len as usize);
+            for _ in 0..len {
+                let frame_ty = bytes.read_u8()?;
+                let frame = match frame_ty {
+                    attr::STACK_MAP_SAME_MIN ...
+                    attr::STACK_MAP_SAME_MAX =>
+                        StackMapFrame::Same(CodeIndex(frame_ty as u16 + attr::STACK_MAP_SAME_OFFSET as u16 )),
+                    attr::STACK_MAP_SAME_EXT =>
+                        StackMapFrame::SameExt(bytes.read_code_index()?),
+                    attr::STACK_MAP_SINGLE_STACK_MIN ...
+                    attr::STACK_MAP_SINGLE_STACK_MAX =>
+                        StackMapFrame::SingleStack(CodeIndex(frame_ty as u16 + attr::STACK_MAP_SINGLE_STACK_OFFSET as u16 ), parse_ty(bytes)?),
+                    attr::STACK_MAP_SINGLE_STACK_EXT =>
+                        StackMapFrame::SingleStackExt(bytes.read_code_index()?, parse_ty(bytes)?),
+                    attr::STACK_MAP_CHOP_1 =>
+                        StackMapFrame::Chop1(bytes.read_code_index()?),
+                    attr::STACK_MAP_CHOP_2 =>
+                        StackMapFrame::Chop2(bytes.read_code_index()?),
+                    attr::STACK_MAP_CHOP_3 =>
+                        StackMapFrame::Chop3(bytes.read_code_index()?),
+                    attr::STACK_MAP_APPEND_1 =>
+                        StackMapFrame::Append1(bytes.read_code_index()?, parse_ty(bytes)?),
+                    attr::STACK_MAP_APPEND_2 =>
+                        StackMapFrame::Append2(bytes.read_code_index()?, parse_ty(bytes)?, parse_ty(bytes)?),
+                    attr::STACK_MAP_APPEND_3 =>
+                        StackMapFrame::Append3(bytes.read_code_index()?, parse_ty(bytes)?, parse_ty(bytes)?, parse_ty(bytes)?),
+                    attr::STACK_MAP_FULL => {
+                        let offset = bytes.read_code_index()?;
+                        let locals_len = bytes.read_u16::<BigEndian>()?;
+                        let mut locals = Vec::with_capacity(locals_len as usize);
+                        for _ in 0..locals_len {
+                            locals.push(parse_ty(bytes)?);
+                        }
+                        let stack_len = bytes.read_u16::<BigEndian>()?;
+                        let mut stack = Vec::with_capacity(stack_len as usize);
+                        for _ in 0..stack_len {
+                            stack.push(parse_ty(bytes)?);
+                        }
+                        StackMapFrame::Full {
+                            offset, locals, stack,
+                        }
+                    },
+                    _ => Err(invalid_data!("unknown stack map frame type {}", frame_ty))?,
+                };
+                frames.push(frame);
+            }
+            AttributeInfo::StackMapTable(frames)
+        },
         attr::ATTR_EXCEPTIONS => {
             let num_exceptions = bytes.read_u16::<BigEndian>()?;
             let mut exceptions = Vec::with_capacity(num_exceptions as usize);
@@ -810,6 +875,82 @@ fn emit_attribute<W: Write>(attribute: &Attribute, out: &mut W) -> Result<()> {
                 emit_attribute(&attr, out)?;
             }
         },
+        AttributeInfo::StackMapTable(ref frames) => {
+            out.write_u16::<BigEndian>(frames.len() as u16)?;
+            #[inline]
+            fn emit_ty<W: Write>(ty: &VerificationType, out: &mut W) -> Result<()> {
+                out.write_u8(ty.tag());
+                match *ty {
+                    VerificationType::Object(ref index) => out.write_constant_index(index)?,
+                    VerificationType::Uninitialized(ref index) => out.write_code_index(index)?,
+                    _ => {}
+                }
+                Ok(())
+            }
+            for frame in frames.iter() {
+                match *frame {
+                    StackMapFrame::Same(ref offset) =>
+                        out.write_u8(offset.0 as u8 + consts::attribute::STACK_MAP_SAME_OFFSET)?,
+                    StackMapFrame::SameExt(ref offset) => {
+                        out.write_u8(consts::attribute::STACK_MAP_SAME_EXT)?;
+                        out.write_code_index(offset)?;
+                    },
+                    StackMapFrame::SingleStack(ref offset, ref ty) => {
+                        out.write_u8(offset.0 as u8 + consts::attribute::STACK_MAP_SINGLE_STACK_OFFSET)?;
+                        emit_ty(ty, out)?;
+                    },
+                    StackMapFrame::SingleStackExt(ref offset, ref ty) => {
+                        out.write_u8(consts::attribute::STACK_MAP_SINGLE_STACK_EXT)?;
+                        out.write_code_index(offset)?;
+                        emit_ty(ty, out)?;
+                    },
+                    StackMapFrame::Chop1(ref offset) => {
+                        out.write_u8(consts::attribute::STACK_MAP_CHOP_1)?;
+                        out.write_code_index(offset)?;
+                    },
+                    StackMapFrame::Chop2(ref offset) => {
+                        out.write_u8(consts::attribute::STACK_MAP_CHOP_2)?;
+                        out.write_code_index(offset)?;
+                    },
+                    StackMapFrame::Chop3(ref offset) => {
+                        out.write_u8(consts::attribute::STACK_MAP_CHOP_3)?;
+                        out.write_code_index(offset)?;
+                    },
+                    StackMapFrame::Append1(ref offset, ref ty1) => {
+                        out.write_u8(consts::attribute::STACK_MAP_APPEND_1)?;
+                        out.write_code_index(offset)?;
+                        emit_ty(ty1, out)?;
+                    },
+                    StackMapFrame::Append2(ref offset, ref ty1, ref ty2) => {
+                        out.write_u8(consts::attribute::STACK_MAP_APPEND_2)?;
+                        out.write_code_index(offset)?;
+                        emit_ty(ty1, out)?;
+                        emit_ty(ty2, out)?;
+                    },
+                    StackMapFrame::Append3(ref offset, ref ty1, ref ty2, ref ty3) => {
+                        out.write_u8(consts::attribute::STACK_MAP_APPEND_3)?;
+                        out.write_code_index(offset)?;
+                        emit_ty(ty1, out)?;
+                        emit_ty(ty2, out)?;
+                        emit_ty(ty3, out)?;
+                    },
+                    StackMapFrame::Full {
+                        ref offset, ref locals, ref stack,
+                    } => {
+                        out.write_u8(consts::attribute::STACK_MAP_FULL)?;
+                        out.write_code_index(offset)?;
+                        out.write_u16::<BigEndian>(locals.len() as u16)?;
+                        for ty in locals.iter() {
+                            emit_ty(ty, out)?;
+                        }
+                        out.write_u16::<BigEndian>(stack.len() as u16)?;
+                        for ty in stack.iter() {
+                            emit_ty(ty, out)?;
+                        }
+                    }
+                }
+            }
+        }
         AttributeInfo::Exceptions(ref exceptions) => {
             out.write_u16::<BigEndian>(exceptions.len() as u16)?;
             for ex in exceptions.iter() {
@@ -865,6 +1006,17 @@ fn emit_attribute<W: Write>(attribute: &Attribute, out: &mut W) -> Result<()> {
         AttributeInfo::Deprecated => {}
 
         AttributeInfo::Other(ref buf) => out.write_all(&buf[..])?,
+
+        AttributeInfo::BootstrapMethods(ref methods) => {
+            out.write_u16::<BigEndian>(methods.len() as u16)?;
+            for method in methods.iter() {
+                out.write_constant_index(&method.method)?;
+                out.write_u16::<BigEndian>(method.arguments.len() as u16)?;
+                for arg in method.arguments.iter() {
+                    out.write_constant_index(arg)?;
+                }
+            }
+        }
 
         // FIXME: emit the rest of the attributes
         _ => unimplemented!(),

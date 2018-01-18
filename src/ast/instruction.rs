@@ -140,41 +140,33 @@ impl Instruction {
             ($name:path, $ty:ident) => (op_tuple!($name, $ty, 2, 2; 0, 1));
         }
 
+        macro_rules! op_vec {
+            ($name:path, $ty:ident, $min:expr) => {
+                if min_args(&mut reports, &line, $min) {
+                    let op = $name(line.args.clone());
+                    let SourceLine {
+                        label, instruction, args, span,
+                    } = line;
+                    result = Some(Instruction {
+                        label,
+                        ident: instruction,
+                        body: InstructionBody::$ty(op),
+                        span,
+                    });
+                }
+            };
+        }
+
         match line.instruction.name.clone().as_str() {
             inst::CLASS => op_struct!(ItemI::Class, Item, 2, 2; this_class, super_class),
             inst::FIELD => op_struct!(ItemI::Field, Item, 1, 2; descriptor; name),
             inst::METHOD => op_struct!(ItemI::Method, Item, 1, 2; descriptor; name),
 
-            inst::IMPL => {
-                if min_args(&mut reports, &line, 1) {
-                    let op = MetaI::Impl(line.args.clone());
-                    let SourceLine {
-                        label, instruction, args, span,
-                    } = line;
-                    result = Some(Instruction {
-                        label,
-                        ident: instruction,
-                        body: InstructionBody::Meta(op),
-                        span,
-                    });
-                }
-            }
+            inst::IMPL => op_vec!(MetaI::Impl, Meta, 1),
             inst::VERSION => op_struct!(MetaI::Version, Meta, 2, 2; minor, major),
 
-            inst::FLAGS => {
-                if min_args(&mut reports, &line, 1) {
-                    let op = MetaI::Flags(line.args.clone());
-                    let SourceLine {
-                        label, instruction, args, span,
-                    } = line;
-                    result = Some(Instruction {
-                        label,
-                        ident: instruction,
-                        body: InstructionBody::Meta(op),
-                        span,
-                    });
-                }
-            }
+            inst::FLAGS => op_vec!(MetaI::Flags, Meta, 1),
+
             inst::STACK => op_1!(MetaI::Stack, Meta),
             inst::LOCALS => op_1!(MetaI::Locals, Meta),
             inst::CATCH => op_struct!(MetaI::Catch, Meta, 4, 4; start, end, handler, ty),
@@ -182,6 +174,10 @@ impl Instruction {
             inst::CONST_VALUE => op_1!(MetaI::ConstantValue, Meta),
 
             inst::SOURCE => op_1!(MetaI::Source, Meta),
+
+            inst::BOOTSTRAP => op_vec!(MetaI::Bootstrap, Meta, 1),
+
+            inst::STACK_MAP => op_vec!(MetaI::StackMap, Meta, 2),
 
             inst::ATTR => op_2!(MetaI::Attr, Meta),
 
@@ -630,6 +626,10 @@ pub enum MetaInstruction {
     ConstantValue(Expr),
 
     Source(Expr),
+
+    Bootstrap(Vec<Expr>),
+
+    StackMap(Vec<Expr>),
 
     Attr(Expr, Expr),
 }

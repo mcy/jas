@@ -72,4 +72,4 @@ getFoo:     method          "()I"
 ;
             class           "jas/example/Foo", "java/lang/Object"
             flags           public, interface
-            version         51.0
+            version         0, 51

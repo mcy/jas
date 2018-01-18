@@ -20,6 +20,10 @@ pub mod instructions {
 
     pub const SOURCE: &'static str = "source";
 
+    pub const BOOTSTRAP: &'static str = "bootstrap";
+    
+    pub const STACK_MAP: &'static str = "stack_map";
+
     pub const ATTR: &'static str = "attr";
 
     // constants
@@ -325,6 +329,28 @@ pub mod special {
     pub const ARR_SHORT: &'static str = "short";
     pub const ARR_INT: &'static str = "int";
     pub const ARR_LONG: &'static str = "long";
+
+    pub const STACK_MAP_SAME: &'static str = "same";
+    pub const STACK_MAP_SAME_EXT: &'static str = "same_ext";
+    pub const STACK_MAP_SINGLE_STACK: &'static str = "single_stack";
+    pub const STACK_MAP_SINGLE_STACK_EXT: &'static str = "single_stack_ext";
+    pub const STACK_MAP_CHOP_3: &'static str = "chop_3";
+    pub const STACK_MAP_CHOP_2: &'static str = "chop_2";
+    pub const STACK_MAP_CHOP_1: &'static str = "chop_1";
+    pub const STACK_MAP_APPEND_3: &'static str = "append_3";
+    pub const STACK_MAP_APPEND_2: &'static str = "append_2";
+    pub const STACK_MAP_APPEND_1: &'static str = "append_1";
+    pub const STACK_MAP_FULL: &'static str = "full";
+
+    pub const VTYPE_TOP: &'static str = "top";
+    pub const VTYPE_INT: &'static str = "int";
+    pub const VTYPE_FLOAT: &'static str = "float";
+    pub const VTYPE_LONG: &'static str = "long"; // [sic]
+    pub const VTYPE_DOUBLE: &'static str = "double";
+    pub const VTYPE_NULL: &'static str = "null";
+    pub const VTYPE_UNINIT_THIS: &'static str = "uninit_this";
+    pub const VTYPE_OBJ: &'static str = "obj";
+    pub const VTYPE_UNINIT: &'static str = "uninit";
 }
 
 pub mod flags {

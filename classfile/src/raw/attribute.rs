@@ -1,6 +1,7 @@
 use super::*;
 
 use consts::class;
+use consts::attribute as attr;
 use indexing::*;
 
 #[derive(Debug)]
@@ -22,7 +23,7 @@ pub enum AttributeInfo {
         attributes: Vec<Attribute>,
     },
 
-    //StackMapTable(Vec<StackMapFrame>),
+    StackMapTable(Vec<StackMapFrame>),
 
     Exceptions(Vec<ConstantIndex>),
 
@@ -74,6 +75,28 @@ impl AttributeInfo {
                     2 + attributes.iter().map(|attr| 2 + 4 + attr.info.len()).sum::<usize>()
             },
 
+            AttributeInfo::StackMapTable(ref frames) => {
+                2 + frames.iter().map(|frame| {
+                    match *frame {
+                        StackMapFrame::Same(..) => 1,
+                        StackMapFrame::SameExt(..) => 3,
+                        StackMapFrame::SingleStack(_, ref ty) => 1 + ty.len(),
+                        StackMapFrame::SingleStackExt(_, ref ty) => 3 + ty.len(),
+                        StackMapFrame::Chop1(..) => 3,
+                        StackMapFrame::Chop2(..) => 3,
+                        StackMapFrame::Chop3(..) => 3,
+                        StackMapFrame::Append1(_, ref ty1) => 3 + ty1.len(),
+                        StackMapFrame::Append2(_, ref ty1, ref ty2) => 3 + ty1.len() + ty2.len(),
+                        StackMapFrame::Append3(_, ref ty1, ref ty2, ref ty3) => 3 + ty1.len() + ty2.len() + ty3.len(),
+                        StackMapFrame::Full { offset: _, ref locals, ref stack } => {
+                            1 + 2 + 2 + 2 +
+                                locals.iter().map(VerificationType::len).sum::<usize>() +
+                                stack.iter().map(VerificationType::len).sum::<usize>()
+                        },
+                    }
+                }).sum::<usize>()
+            }
+
             AttributeInfo::Exceptions(ref indices) => 2 + indices.len() * ConstantIndex::len(),
 
             AttributeInfo::InnerClasses(ref classes) =>
@@ -110,7 +133,7 @@ impl AttributeInfo {
             AttributeInfo::AnnotationDefault(ref an) => 4 + an.len(),
 
             AttributeInfo::BootstrapMethods(ref methods) =>
-                methods.iter().map(|meth| ConstantIndex::len() * (meth.arguments.len() + 1)).sum(),
+                2 + methods.iter().map(|meth| 2 + ConstantIndex::len() * (meth.arguments.len() + 1)).sum::<usize>(),
 
             AttributeInfo::Other(ref bytes) => bytes.len(),
         }
@@ -118,33 +141,19 @@ impl AttributeInfo {
 }
 
 #[derive(Debug)]
-pub struct StackMapFrame {
-    frame_type: u8,
-    data: StackMapFrameData
-}
-
-#[derive(Debug)]
-pub enum StackMapFrameData {
-    SameFrame, /* 0-63 */
-    SameFrameOneItem { /* 64-127 */
-        stack: VerificationType,
-    },
-    SameFrameOneItemExtended { /* 247 */
-        offset_delta: u16,
-        stack: VerificationType,
-    },
-    ChopFrame { /* 248-250 */
-        offset_delta: u16,
-    },
-    FrameExtended { /* 251 */
-        offset_delta: u16,
-    },
-    AppendFrame { /* 252-254 */
-        offset_delta: u16,
-        locals: Vec<VerificationType>,
-    },
-    FullFrame { /* 255 */
-        offset_delta: u16,
+pub enum StackMapFrame {
+    Same(CodeIndex),
+    SameExt(CodeIndex),
+    SingleStack(CodeIndex, VerificationType),
+    SingleStackExt(CodeIndex, VerificationType),
+    Chop1(CodeIndex),
+    Chop2(CodeIndex),
+    Chop3(CodeIndex),
+    Append1(CodeIndex, VerificationType),
+    Append2(CodeIndex, VerificationType, VerificationType),
+    Append3(CodeIndex, VerificationType, VerificationType, VerificationType),
+    Full {
+        offset: CodeIndex,
         locals: Vec<VerificationType>,
         stack: Vec<VerificationType>,
     }
@@ -161,6 +170,30 @@ pub enum VerificationType {
     UninitializedThis,
     Object(ConstantIndex),
     Uninitialized(CodeIndex),
+}
+
+impl VerificationType {
+    pub fn tag(&self) -> u8 {
+        match *self {
+            VerificationType::Top => attr::VTYPE_TOP,
+            VerificationType::Int => attr::VTYPE_INT,
+            VerificationType::Float => attr::VTYPE_FLOAT,
+            VerificationType::Long => attr::VTYPE_LONG,
+            VerificationType::Double => attr::VTYPE_DOUBLE,
+            VerificationType::Null => attr::VTYPE_NULL,
+            VerificationType::UninitializedThis => attr::VTYPE_UNINIT_THIS,
+            VerificationType::Object(..) => attr::VTYPE_OBJ,
+            VerificationType::Uninitialized(..) => attr::VTYPE_UNINIT,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        match *self {
+            VerificationType::Object(..) => 3,
+            VerificationType::Uninitialized(..) => 3,
+            _ => 1,
+        }
+    }
 }
 
 #[derive(Debug)]
