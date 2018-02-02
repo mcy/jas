@@ -1,5 +1,4 @@
 use ast::*;
-use codegen::*;
 use phase::Phase;
 use reporting::*;
 use source_file::Span;

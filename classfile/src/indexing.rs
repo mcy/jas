@@ -2,7 +2,7 @@
 use byteorder::*;
 use std::io;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HalfConstantIndex(pub u8);
 
 impl HalfConstantIndex {
@@ -11,7 +11,7 @@ impl HalfConstantIndex {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConstantIndex(pub u16);
 
 impl ConstantIndex {
@@ -20,7 +20,7 @@ impl ConstantIndex {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CodeIndex(pub u16);
 
 impl CodeIndex {
@@ -29,7 +29,7 @@ impl CodeIndex {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WideCodeIndex(pub u32);
 
 impl WideCodeIndex {
@@ -38,7 +38,7 @@ impl WideCodeIndex {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CodeOffset(pub i16);
 
 impl CodeOffset {
@@ -47,7 +47,7 @@ impl CodeOffset {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WideCodeOffset(pub i32);
 
 impl WideCodeOffset {
@@ -56,7 +56,7 @@ impl WideCodeOffset {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VarIndex(pub u8);
 
 impl VarIndex {
@@ -65,7 +65,7 @@ impl VarIndex {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WideVarIndex(pub u16);
 
 impl WideVarIndex {

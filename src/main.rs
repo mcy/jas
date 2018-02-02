@@ -1,3 +1,4 @@
+
 extern crate classfile;
 extern crate either;
 extern crate base64;
@@ -10,6 +11,7 @@ pub mod consts;
 pub mod codegen;
 pub mod lexer;
 pub mod phase;
+pub mod sections;
 pub mod source_file;
 pub mod util;
 
@@ -36,7 +38,7 @@ fn assemble<P: AsRef<path::Path>>(path: P) -> s_io::Result<()> {
     let source = Rc::new(source_file::SourceFile::from_file(path)?);
     let tokens = lexer::Lexer::run_and_error(vec![source]);
     let ast = ast::Parser::run_and_error(tokens);
-    let sections = codegen::ClassSection::run_and_error(ast);
+    let sections = sections::ClassSection::run_and_error(ast);
     let classes = codegen::Generator::run_and_error(sections);
 
     for (i, (path, class)) in classes.into_iter().enumerate() {
@@ -51,6 +53,7 @@ fn assemble<P: AsRef<path::Path>>(path: P) -> s_io::Result<()> {
             fs::create_dir_all(path);
         }
 
+        eprintln!("  emitting: {}", buf.display());
         let mut file = fs::File::create(buf)?;
         io::emit_class(&class, &mut file)?;
     }

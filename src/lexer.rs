@@ -40,7 +40,7 @@ pub struct Lexer {
     token_queue: Vec<Token>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, PartialEq, Eq)]
 enum LexerState {
     None,
     AlphaNum,
@@ -52,7 +52,12 @@ enum LexerState {
     CharEsc,
     CharEnd,
     Punct,
+    Backslash,
+    CommentStart,
     Comment,
+    MultiComment(Option<Box<LexerState>>),
+    MultiNest(Option<Box<LexerState>>),
+    MultiEnd(Option<Box<LexerState>>),
 }
 
 impl Lexer {
@@ -94,7 +99,7 @@ impl Lexer {
     }
 
     fn start_comment(&mut self) {
-        self.state = LexerState::Comment;
+        self.state = LexerState::CommentStart;
     }
 
     // this returns true if the token stack
@@ -109,7 +114,7 @@ impl Lexer {
             // the buffer; we'll validate all the tokens
             // later, anyways.
             match self.state {
-                LS::None | LS::Comment => {},
+                LS::None | LS::Comment | LS::CommentStart | LS::MultiComment(_) | LS::MultiNest(_) | LS::MultiEnd(_) => {},
                 LS::AlphaNum => {
                     self.end_token(TT::AlphaNum);
                 },
@@ -122,7 +127,7 @@ impl Lexer {
                 LS::CharLit | LS::CharEsc | LS::CharEnd => {
                     self.end_token(TT::Char)
                 },
-                LS::Punct => {
+                LS::Punct | LS::Backslash => {
                     self.end_token(TT::Punct);
                 },
             }
@@ -130,7 +135,7 @@ impl Lexer {
             return true;
         };
 
-        match self.state {
+        match self.state.clone() { // FIXME: get rid of clone
             LS::None => {
                 match next {
                     'a' ... 'z' | '$' | '_' | '<' | '>' |
@@ -149,6 +154,9 @@ impl Lexer {
                     },
                     ';' => {
                         self.start_comment();
+                    },
+                    '\\' => {
+                        self.new_token(next, LS::Backslash);
                     },
                     _ => {
                         self.new_token(next, LS::Punct);
@@ -180,6 +188,10 @@ impl Lexer {
                         self.end_token(TT::AlphaNum);
                         self.start_comment();
                     },
+                    '\\' => {
+                        self.end_token(TT::AlphaNum);
+                        self.new_token(next, LS::Backslash);
+                    },
                     _ => {
                         self.end_token(TT::AlphaNum);
                         self.new_token(next, LS::Punct);
@@ -207,6 +219,10 @@ impl Lexer {
                     ';' => {
                         self.end_token(TT::LineBreak);
                         self.start_comment();
+                    },
+                    '\\' => {
+                        self.end_token(TT::LineBreak);
+                        self.new_token(next, LS::Backslash);
                     },
                     _ => {
                         self.end_token(TT::LineBreak);
@@ -266,6 +282,10 @@ impl Lexer {
                         self.end_token(TT::Str);
                         self.start_comment();
                     },
+                    '\\' => {
+                        self.end_token(TT::Str);
+                        self.new_token(next, LS::Backslash);
+                    },
                     _ => {
                         self.end_token(TT::Str);
                         self.new_token(next, LS::Punct);
@@ -324,9 +344,26 @@ impl Lexer {
                         self.end_token(TT::Char);
                         self.start_comment();
                     },
+                    '\\' => {
+                        self.end_token(TT::Char);
+                        self.new_token(next, LS::Backslash);
+                    },
                     _ => {
                         self.end_token(TT::Char);
                         self.new_token(next, LS::Punct);
+                    },
+                }
+            },
+            LS::CommentStart => {
+                match next {
+                    '[' => {
+                        self.state = LS::MultiComment(None);
+                    },
+                    '\n' => {
+                        self.new_token(next, LS::LineBreak);
+                    },
+                    _ => {
+                        self.state = LS::Comment;
                     },
                 }
             },
@@ -336,6 +373,41 @@ impl Lexer {
                         self.new_token(next, LS::LineBreak);
                     },
                     _ => {},
+                }
+            },
+            LS::MultiComment(inner) => {
+                match next {
+                    ']' => {
+                        self.state = LS::MultiEnd(inner);
+                    },
+                    ';' => {
+                        self.state = LS::MultiNest(inner);
+                    },
+                    _ => {},
+                }
+            },
+            LS::MultiNest(inner) => {
+                match next {
+                    '[' => {
+                        self.state = LS::MultiComment(Some(Box::new(LS::MultiComment(inner))));
+                    },
+                    _ => {
+                        self.state = LS::MultiComment(inner);
+                    },
+                }
+            },
+            LS::MultiEnd(inner) => {
+                match next {
+                    ';' => {
+                        self.state = if let Some(ptr) = inner {
+                            *ptr
+                        } else {
+                            LS::None
+                        }
+                    }
+                    _ => {
+                        self.state = LS::MultiComment(inner);
+                    },
                 }
             },
             LS::Punct => {
@@ -364,11 +436,59 @@ impl Lexer {
                         self.end_token(TT::Punct);
                         self.start_comment();
                     },
+                    '\\' => {
+                        self.end_token(TT::Punct);
+                        self.new_token(next, LS::Backslash);
+                    },
                     _ => {
                         self.end_token(TT::Punct);
                         self.new_token(next, LS::Punct);
                     },
                 }
+            },
+            LS::Backslash => {
+                // since we want any token we break off
+                // to just have the first character (since we might
+                // have consumed spaces), we have this small hack
+                let mut real_pos = self.current_position;
+                self.current_position = self.start_of_current.unwrap().advance_col();
+                match next {
+                    'a' ... 'z' | '$' | '_' | '<' | '>' |
+                    'A' ... 'Z' | '0' ... '9' | '.' => {
+                        self.end_token(TT::Punct);
+                        self.new_token(next, LS::AlphaNum);
+                    },
+                    '"' => {
+                        self.end_token(TT::Punct);
+                        self.new_token(next, LS::StrLit);
+                    },
+                    '\'' => {
+                        self.end_token(TT::Punct);
+                        self.new_token(next, LS::CharLit);
+                    },
+                    ' ' | '\t' => {
+                        // we're gonna ignore spaces
+                    },
+                    '\n' => {
+                        // and if we hit a newline, ignore it, too!
+                        // we also don't push this backslash as a token
+                        self.current_token = None;
+                        self.state = LS::None;
+                    },
+                    ';' => {
+                        self.end_token(TT::Punct);
+                        self.start_comment();
+                    },
+                    '\\' => {
+                        self.end_token(TT::Punct);
+                        self.new_token(next, LS::Backslash);
+                    },
+                    _ => {
+                        self.end_token(TT::Punct);
+                        self.new_token(next, LS::Punct);
+                    },
+                }
+                self.current_position = real_pos;
             },
         }
 

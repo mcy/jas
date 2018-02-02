@@ -1,7 +1,7 @@
 use consts::constant;
 use indexing::ConstantIndex;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Constant {
     Class(ConstantIndex),
 
@@ -74,7 +74,7 @@ impl Constant {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MethodHandleKind {
     GetField,
     GetStatic,
