@@ -5,12 +5,15 @@ use codegen::Generator;
 use codegen::eval::{self, EvalContext, Value};
 use codegen::convert;
 use codegen::attrs;
+use codegen::labels::LabelKind;
 use sections::{MethodSection, CodeSection};
 use reporting::*;
 
 use classfile::raw;
 use classfile::consts as flags;
 use classfile::indexing::*;
+
+use std::collections::HashMap;
 
 pub fn expand_method(gen: &mut Generator, method: MethodSection) -> Reported<raw::Method> {
 
@@ -33,6 +36,21 @@ pub fn expand_method(gen: &mut Generator, method: MethodSection) -> Reported<raw
         code_len, code_array,
     ) = {
         let mut cx = EvalContext::new(gen);
+
+        // run through and construct local indices
+        let mut code_len = 0;
+        let mut locals = HashMap::new();
+        let mut opcodes = Vec::new();
+        for (i, code) in code.iter().enumerate() {
+            if let Some(ref label) = code.label {
+                locals.insert(label.name.clone(), LabelKind::Code(i as u16));
+            }
+            opcodes.push(CodeIndex(code_len));
+            code_len += code.body.len(code_len as usize) as u16;
+        }
+
+        cx.with_locals(locals).with_opcodes(opcodes);
+
 
         let name = if let Some(name) = m_name {
             if let Some(label) = m_label {

@@ -85,16 +85,6 @@ pub fn expand_class_attrs(gen: &mut Generator, metas: Vec<MetaSection>) -> Repor
         }
     }
 
-    if !gen.bootstrap_table.is_empty() {
-        let name = gen.push_string_constant(flags::attribute::ATTR_BOOTSTRAP_METHODS.into());
-        let bootstrap_methods = mem::replace(&mut gen.bootstrap_table, Vec::new());
-
-        gen.attributes.push(raw::Attribute {
-            name,
-            info: raw::AttributeInfo::BootstrapMethods(bootstrap_methods),
-        });
-    }
-
     reports.complete(())
 }
 

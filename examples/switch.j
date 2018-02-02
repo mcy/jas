@@ -56,13 +56,13 @@ lookup:     method          "(I)I"
             locals          0x01
             iload_0
             lookupswitch    \
-                l_jmp_d,    \
-                0, l_jmp_0, \
-                1, l_jmp_1,
-l_jmp_0:    bipush          91
-            goto            l_exit
-l_jmp_1:    bipush          92
-            goto            l_exit
-l_jmp_d:    bipush          90
-            goto            l_exit
-l_exit:     ireturn
+                jmp_d,      \
+                0, jmp_0,   \
+                1, jmp_1,
+jmp_0:      bipush          91
+            goto            exit
+jmp_1:      bipush          92
+            goto            exit
+jmp_d:      bipush          90
+            goto            exit
+exit:       ireturn

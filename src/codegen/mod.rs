@@ -17,6 +17,7 @@ use classfile::indexing::*;
 use classfile::consts as flags;
 
 use std::collections::HashMap;
+use std::mem;
 
 #[derive(Debug)]
 pub struct Generator {
@@ -159,6 +160,16 @@ impl Generator {
         for method in methods {
             let method = report_cont!(reports; methods::expand_method(&mut self, method));
             self.methods.push(method);
+        }
+
+        if !self.bootstrap_table.is_empty() {
+            let name = self.push_string_constant(flags::attribute::ATTR_BOOTSTRAP_METHODS.into());
+            let bootstrap_methods = mem::replace(&mut self.bootstrap_table, Vec::new());
+
+            self.attributes.push(raw::Attribute {
+                name,
+                info: raw::AttributeInfo::BootstrapMethods(bootstrap_methods),
+            });
         }
 
         reports.complete((

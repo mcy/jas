@@ -54,8 +54,8 @@ impl Spannable for Value {
 
 pub struct EvalContext<'a> {
     pub gen: &'a mut Generator,
-    pub local_labels: Option<&'a HashMap<String, LabelKind>>,
-    pub opcode_indices: Option<&'a Vec<CodeIndex>>,
+    pub local_labels: Option<HashMap<String, LabelKind>>,
+    pub opcode_indices: Option<Vec<CodeIndex>>,
 }
 
 impl<'b> EvalContext<'b> {
@@ -68,12 +68,12 @@ impl<'b> EvalContext<'b> {
         }
     }
 
-    pub fn with_locals(&mut self, locals: &'b HashMap<String, LabelKind>) -> &mut EvalContext<'b> {
+    pub fn with_locals(&mut self, locals: HashMap<String, LabelKind>) -> &mut EvalContext<'b> {
         self.local_labels = Some(locals);
         self
     }
 
-    pub fn with_opcodes(&mut self, opcodes: &'b Vec<CodeIndex>) -> &mut EvalContext<'b> {
+    pub fn with_opcodes(&mut self, opcodes: Vec<CodeIndex>) -> &mut EvalContext<'b> {
         self.opcode_indices = Some(opcodes);
         self
     }
@@ -102,7 +102,7 @@ impl<'b> EvalContext<'b> {
 
                 if let Some(referent) = self.gen.labels.get(&ident.name) {
                     expand_ref!(referent)
-                } else if let Some(Some(referent)) = self.local_labels.map(|m| m.get(&ident.name)) {
+                } else if let Some(Some(referent)) = self.local_labels.as_ref().map(|m| m.get(&ident.name)) {
                     expand_ref!(referent)
                 } else {
                     fatal_error!(reports; "could not find label `{}`", ident.name; ident.span)

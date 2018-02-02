@@ -2,7 +2,7 @@
             flags           public, super, final, synthetic
             version         0, 51,
 
-            bootstrap       [method_handle invokestatic, [method_ref "java/lang/invoke/LambdaMetafactory", "metafactory", "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/CallSite;"]], [method_type "()V"], [method_handle invokestatic, [method_ref this, "makeFn$lambda", "()V"]], [method_type "()V"]
+            ;bootstrap       [method_handle invokestatic, [method_ref "java/lang/invoke/LambdaMetafactory", "metafactory", "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/CallSite;"]], [method_type "()V"], [method_handle invokestatic, [method_ref this, "makeFn$lambda", "()V"]], [method_type "()V"]
 
 
 <init>:     method          "()V"
@@ -30,7 +30,7 @@ makeFn:     method          "()Ljava/lang/Runnable;"
             flags           static
             stack           0x01
             locals          0x00
-            invokedynamic   [dynamic_target 0x00, "run", "()Ljava/lang/Runnable;"]
+            invokedynamic   [dynamic_target [bootstrap [method_handle invokestatic, [method_ref "java/lang/invoke/LambdaMetafactory", "metafactory", "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/CallSite;"]], [method_type "()V"], [method_handle invokestatic, [method_ref this, "makeFn$lambda", "()V"]], [method_type "()V"]], "run", "()Ljava/lang/Runnable;"]
             areturn
 
 makeFn$lambda:
