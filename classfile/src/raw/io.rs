@@ -212,7 +212,7 @@ fn parse_attribute<R: Read>(bytes: &mut R, index: u16, constants: &Vec<Constant>
             }
         },
         /*"StackMapTable" => unimplemented!(),*/
-        attr::ATTR_STACK_MAP_TABLE => {
+        /*attr::ATTR_STACK_MAP_TABLE => {
             fn parse_ty<R: Read>(bytes: &mut R) -> Result<VerificationType> {
                 let tag = bytes.read_u8()?;
                 Ok(match tag {
@@ -225,7 +225,7 @@ fn parse_attribute<R: Read>(bytes: &mut R, index: u16, constants: &Vec<Constant>
                     attr::VTYPE_OBJ => VerificationType::Object(bytes.read_constant_index()?),
                     attr::VTYPE_UNINIT => VerificationType::Uninitialized(bytes.read_code_index()?),
                     attr::VTYPE_UNINIT_THIS => VerificationType::UninitializedThis,
-                    _ => Err(invalid_data!("unknown verification type {}", tag))?,
+                    _ => panic!(),//Err(invalid_data!("unknown verification type {}", tag))?,
                 })
             }
             let len = bytes.read_u16::<BigEndian>()?;
@@ -276,7 +276,7 @@ fn parse_attribute<R: Read>(bytes: &mut R, index: u16, constants: &Vec<Constant>
                 frames.push(frame);
             }
             AttributeInfo::StackMapTable(frames)
-        },
+        },*/
         attr::ATTR_EXCEPTIONS => {
             let num_exceptions = bytes.read_u16::<BigEndian>()?;
             let mut exceptions = Vec::with_capacity(num_exceptions as usize);
@@ -668,7 +668,7 @@ fn parse_code<R: Read>(bytes: &mut R, len: u32) -> Result<Vec<Instruction>> {
                 let count = bytes.read_u8()?;
                 let _ = bytes.read_u8()?;
 
-                InvokeInterface(bytes.read_constant_index()?, count)
+                InvokeInterface(index, count)
             },
             code::OPCODE_INVOKE_DYNAMIC => {
                 let index = bytes.read_constant_index()?;

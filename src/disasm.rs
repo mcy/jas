@@ -158,6 +158,25 @@ pub fn disassemble_class(path: &str, class: &raw::Class) -> String {
             ref descriptor,
             ref attributes,
         } = *field;
+
+        {
+            let name = if let raw::Constant::Utf8(ref str) = class.constant_pool[name.0 as usize - 1] {
+                Some(str.clone())
+            } else {
+                None
+            };
+
+            let desc = if let raw::Constant::Utf8(ref str) = class.constant_pool[descriptor.0 as usize - 1] {
+                Some(str.clone())
+            } else {
+                None
+            };
+
+            if name.is_some() && desc.is_some() {
+                lines.push(format!("; {}:{}", name.unwrap(), desc.unwrap()));
+            }
+        }
+
         lines.push(format!("{: <15} {:#06x}, {:#06x},", instructions::FIELD, descriptor.0, name.0));
 
         let flags = print_flags!(field.flags;
@@ -200,6 +219,25 @@ pub fn disassemble_class(path: &str, class: &raw::Class) -> String {
             ref descriptor,
             ref attributes,
         } = *method;
+
+        {
+            let name = if let raw::Constant::Utf8(ref str) = class.constant_pool[name.0 as usize - 1] {
+                Some(str.clone())
+            } else {
+                None
+            };
+
+            let desc = if let raw::Constant::Utf8(ref str) = class.constant_pool[descriptor.0 as usize - 1] {
+                Some(str.clone())
+            } else {
+                None
+            };
+
+            if name.is_some() && desc.is_some() {
+                lines.push(format!("; {}:{}", name.unwrap(), desc.unwrap()));
+            }
+        }
+
         lines.push(format!("{: <15} {:#06x}, {:#06x},", instructions::METHOD, descriptor.0, name.0));
 
         let flags = print_flags!(method.flags;
