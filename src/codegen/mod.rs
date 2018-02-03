@@ -96,7 +96,7 @@ impl Generator {
     pub(in codegen) fn push_expanded_constant(&mut self, constant: raw::Constant) -> ConstantIndex {
 
         if let Some(index) = self.declared_constants.iter().position(|x| x == &constant) {
-            ConstantIndex(index as u16)
+            ConstantIndex(index as u16 + 1)
         } else if let Some(index) = self.expanded_constants.iter().position(|x| x == &constant) {
             ConstantIndex((self.declared_count + index) as u16)
         } else {

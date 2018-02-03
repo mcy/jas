@@ -623,7 +623,7 @@ fn parse_code<R: Read>(bytes: &mut R, len: u32) -> Result<Vec<Instruction>> {
                 }
                 let default_offset = bytes.read_wide_code_offset()?;
                 let match_range = (bytes.read_i32::<BigEndian>()?, bytes.read_i32::<BigEndian>()?);
-                let offset_count = (match_range.1 - match_range.0) as usize;
+                let offset_count = (match_range.1 - match_range.0 + 1) as usize;
                 let mut offset_table = Vec::with_capacity(offset_count);
                 for _ in 0..offset_count {
                     offset_table.push(bytes.read_wide_code_offset()?);
@@ -675,7 +675,7 @@ fn parse_code<R: Read>(bytes: &mut R, len: u32) -> Result<Vec<Instruction>> {
                 let _ = bytes.read_u8()?;
                 let _ = bytes.read_u8()?;
 
-                InvokeDynamic(bytes.read_constant_index()?)
+                InvokeDynamic(index)
             },
 
             code::OPCODE_NEW => New(bytes.read_constant_index()?),

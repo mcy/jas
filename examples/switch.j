@@ -55,10 +55,10 @@ lookup:     method          "(I)I"
             stack           0x01
             locals          0x01
             iload_0
-            lookupswitch    \
-                jmp_d,      \
-                0, jmp_0,   \
-                1, jmp_1,
+            lookupswitch        \
+                jmp_d,          \
+                    0, jmp_0,   \
+                    1, jmp_1,
 jmp_0:      bipush          91
             goto            exit
 jmp_1:      bipush          92
