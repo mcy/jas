@@ -1,4 +1,4 @@
-use reporting::*;
+use crate::reporting::*;
 
 use std::process::exit;
 

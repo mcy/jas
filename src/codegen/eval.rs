@@ -1,19 +1,19 @@
-use ast::*;
-use codegen::Generator;
-use codegen::labels::LabelKind;
-use codegen::attrs;
-use codegen::constants;
-use reporting::*;
-use sections::*;
-use source_file::*;
+use crate::ast::*;
+use crate::codegen::Generator;
+use crate::codegen::labels::LabelKind;
+use crate::codegen::attrs;
+use crate::codegen::constants;
+use crate::reporting::*;
+use crate::sections::*;
+use crate::source_file::*;
 
 use classfile::indexing::*;
 use classfile::raw;
 
 use std::collections::HashMap;
-use std::{u16, i16, u32, i32};
+use std::{u16, i16, i32};
 
-pub const FN_NONE: Option<fn(&mut EvalContext, String) -> ConstantIndex> = None;
+pub const FN_NONE: Option<fn(&mut EvalContext<'_>, String) -> ConstantIndex> = None;
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -60,7 +60,7 @@ pub struct EvalContext<'a> {
 
 impl<'b> EvalContext<'b> {
 
-    pub fn new(gen: &'b mut Generator) -> EvalContext {
+    pub fn new(gen: &'b mut Generator) -> EvalContext<'_> {
         EvalContext {
             gen,
             local_labels: None,
@@ -115,7 +115,7 @@ impl<'b> EvalContext<'b> {
             // had some value to begin with
             Expr::Char(char) => Value::Int(char.value as i64, char.span),
             Expr::Bracket(instruction) => {
-                let Instruction { label, ident, body, span } = { *instruction };
+                let Instruction { ident, body, span, .. } = { *instruction };
                 match body {
                     InstructionBody::Constant(c) => {
                         let constant = report_try!(reports; constants::expand_constant(&mut self.gen, ConstantSection {
@@ -150,7 +150,7 @@ impl<'b> EvalContext<'b> {
                 let second = report_try!(reports; self.eval(*second));
 
                 match (first, second) {
-                    (Value::Int(x, span1), Value::Int(y, span2)) => {
+                    (Value::Int(x, _span1), Value::Int(y, _span2)) => {
                         let val = match op {
                             BinOpKind::Add => x + y,
                             BinOpKind::Sub => x - y,
@@ -163,7 +163,7 @@ impl<'b> EvalContext<'b> {
                         };
                         Value::Int(val, span)
                     },
-                    (Value::Float(x, span1), Value::Float(y, span2)) => {
+                    (Value::Float(x, _span1), Value::Float(y, _span2)) => {
                         let val = match op {
                             BinOpKind::Add => x + y,
                             BinOpKind::Sub => x - y,
@@ -216,11 +216,11 @@ impl<'b> EvalContext<'b> {
     }
 
     pub fn eval_into_utf8<'a>(&'a mut self, expr: Expr) -> Reported<ConstantIndex> {
-        EvalContext::eval_into_const_index(self, expr, Some(|cx: &mut EvalContext, str| cx.gen.push_string_constant(str)))
+        EvalContext::eval_into_const_index(self, expr, Some(|cx: &mut EvalContext<'_>, str| cx.gen.push_string_constant(str)))
     }
 
     pub fn eval_into_class<'a>(&'a mut self, expr: Expr) -> Reported<ConstantIndex> {
-        EvalContext::eval_into_const_index(self.reborrow(), expr, Some(|cx: &mut EvalContext, s| {
+        EvalContext::eval_into_const_index(self.reborrow(), expr, Some(|cx: &mut EvalContext<'_>, s| {
             let first = cx.gen.push_expanded_constant(raw::Constant::Utf8(s));
             cx.gen.push_expanded_constant(raw::Constant::Class(first))
         }))
@@ -254,7 +254,7 @@ impl<'b> EvalContext<'b> {
             Value::Float(_, span) => {
                 fatal_error!(reports; "expected code index, found float"; span)
             },
-            Value::Str(str, span) => {
+            Value::Str(_str, span) => {
                 fatal_error!(reports; "expected code index, found string"; span)
             }
         };
@@ -290,7 +290,7 @@ impl<'b> EvalContext<'b> {
             Value::Float(_, span) => {
                 fatal_error!(reports; "expected code index, found float"; span)
             },
-            Value::Str(str, span) => {
+            Value::Str(_str, span) => {
                 fatal_error!(reports; "expected code index, found string"; span)
             }
         };
@@ -326,7 +326,7 @@ impl<'b> EvalContext<'b> {
             Value::Float(_, span) => {
                 fatal_error!(reports; "expected code index, found float"; span)
             },
-            Value::Str(str, span) => {
+            Value::Str(_str, span) => {
                 fatal_error!(reports; "expected code index, found string"; span)
             }
         };

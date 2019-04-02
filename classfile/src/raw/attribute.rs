@@ -67,7 +67,7 @@ impl AttributeInfo {
             AttributeInfo::ConstantValue(..) => ConstantIndex::len(),
 
             AttributeInfo::Code {
-                ref max_stack, ref max_locals, code_len, ref code, ref exception_table, ref attributes,
+                code_len, ref exception_table, ref attributes, ..
             } => {
                 2 * CodeIndex::len() +
                     4 + code_len as usize +

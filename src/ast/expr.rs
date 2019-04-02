@@ -1,6 +1,6 @@
-use ast::*;
-use reporting::*;
-use source_file::*;
+use crate::ast::*;
+use crate::reporting::*;
+use crate::source_file::*;
 
 #[derive(Clone, Debug)]
 pub struct SourceLine {

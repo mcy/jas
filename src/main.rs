@@ -2,8 +2,8 @@
 #[macro_use]
 extern crate clap;
 
-extern crate classfile;
-extern crate base64;
+
+
 
 #[macro_use]
 pub mod reporting;
@@ -18,11 +18,10 @@ pub mod sections;
 pub mod source_file;
 pub mod util;
 
-use phase::Phase;
+use crate::phase::Phase;
 
 use classfile::raw;
 
-use std::env;
 use std::fs;
 use std::path;
 use std::io;
@@ -53,7 +52,7 @@ fn main() {
                 buf.push(output);
             }
             if let Some(path) = buf.as_path().parent() {
-                fs::create_dir_all(path);
+                fs::create_dir_all(path).unwrap();
             }
 
             buf.push(format!("disasm_{}.j", file.replace("/", ".")));
@@ -74,7 +73,7 @@ fn main() {
                 }
                 buf.extend(path.into_iter());
                 if let Some(path) = buf.as_path().parent() {
-                    fs::create_dir_all(path);
+                    fs::create_dir_all(path).unwrap();
                 }
 
                 eprintln!("  emitting: {}", buf.display());
@@ -99,7 +98,7 @@ fn assemble<P: AsRef<path::Path>>(path: P) -> io::Result<Vec<(Vec<String>, Vec<u
 
         let path = path.unwrap_or_else(|| vec![format!("unknown{}.class", i)]);
         let mut bytes = Vec::new();
-        raw::io::emit_class(&class, &mut bytes);
+        raw::io::emit_class(&class, &mut bytes)?;
         results.push((path, bytes));
     }
 

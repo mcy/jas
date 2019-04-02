@@ -1,10 +1,10 @@
-use ast::*;
-use consts::special;
-use codegen::Generator;
-use codegen::eval::{self, EvalContext, Value};
-use codegen::convert;
-use sections::ConstantSection;
-use reporting::*;
+use crate::ast::*;
+use crate::consts::special;
+use crate::codegen::Generator;
+use crate::codegen::eval::{self, EvalContext, Value};
+use crate::codegen::convert;
+use crate::sections::ConstantSection;
+use crate::reporting::*;
 
 use classfile::raw;
 
@@ -45,7 +45,7 @@ pub fn expand_constant(gen: &mut Generator, constant: ConstantSection) -> Report
         }}
     }
 
-    let ConstantSection { label, ident, span, body } = constant;
+    let ConstantSection { body, .. } = constant;
 
     let constant = match body {
         ConstantInstruction::ClassRef(class) => {

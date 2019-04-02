@@ -1,6 +1,6 @@
-use source_file::*;
+use crate::source_file::*;
 
-pub use source_file::Spannable;
+pub use crate::source_file::Spannable;
 
 macro_rules! fatal_error {
     ($reports:ident; $($args:tt)+) => {{

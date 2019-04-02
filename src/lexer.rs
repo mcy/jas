@@ -1,11 +1,10 @@
 use std::mem;
 use std::rc::Rc;
-use std::result;
 use std::vec;
 
-use phase::Phase;
-use source_file::*;
-use reporting::*;
+use crate::phase::Phase;
+use crate::source_file::*;
+use crate::reporting::*;
 
 #[derive(Clone, Debug)]
 pub struct Token {
@@ -138,8 +137,8 @@ impl Lexer {
         match self.state.clone() { // FIXME: get rid of clone
             LS::None => {
                 match next {
-                    'a' ... 'z' | '$' | '_' | '<' | '>' |
-                    'A' ... 'Z' | '0' ... '9' | '.' => {
+                    'a' ..= 'z' | '$' | '_' | '<' | '>' |
+                    'A' ..= 'Z' | '0' ..= '9' | '.' => {
                         self.new_token(next, LS::AlphaNum);
                     },
                     '"' => {
@@ -165,8 +164,8 @@ impl Lexer {
             },
             LS::AlphaNum => {
                 match next {
-                    'a' ... 'z' | '$' | '_' | '<' | '>' |
-                    'A' ... 'Z' | '0' ... '9' | '.' => {
+                    'a' ..= 'z' | '$' | '_' | '<' | '>' |
+                    'A' ..= 'Z' | '0' ..= '9' | '.' => {
                         self.push_char(next);
                     },
                     '"' => {
@@ -200,8 +199,8 @@ impl Lexer {
             },
             LS::LineBreak => {
                 match next {
-                    'a' ... 'z' | '$' | '_' | '<' | '>' |
-                    'A' ... 'Z' | '0' ... '9' | '.' => {
+                    'a' ..= 'z' | '$' | '_' | '<' | '>' |
+                    'A' ..= 'Z' | '0' ..= '9' | '.' => {
                         self.end_token(TT::LineBreak);
                         self.new_token(next, LS::AlphaNum);
                     },
@@ -258,8 +257,8 @@ impl Lexer {
             },
             LS::StrEnd => {
                 match next {
-                    'a' ... 'z' | '$' | '_' | '<' | '>' |
-                    'A' ... 'Z' | '0' ... '9' | '.' => {
+                    'a' ..= 'z' | '$' | '_' | '<' | '>' |
+                    'A' ..= 'Z' | '0' ..= '9' | '.' => {
                         self.end_token(TT::Str);
                         self.new_token(next, LS::AlphaNum);
                     },
@@ -320,8 +319,8 @@ impl Lexer {
             },
             LS::CharEnd => {
                 match next {
-                    'a' ... 'z' | '$' | '_' | '<' | '>' |
-                    'A' ... 'Z' | '0' ... '9' | '.' => {
+                    'a' ..= 'z' | '$' | '_' | '<' | '>' |
+                    'A' ..= 'Z' | '0' ..= '9' | '.' => {
                         self.end_token(TT::Char);
                         self.new_token(next, LS::AlphaNum);
                     },
@@ -412,8 +411,8 @@ impl Lexer {
             },
             LS::Punct => {
                 match next {
-                    'a' ... 'z' | '$' | '_' | '<' | '>' |
-                    'A' ... 'Z' | '0' ... '9' | '.' => {
+                    'a' ..= 'z' | '$' | '_' | '<' | '>' |
+                    'A' ..= 'Z' | '0' ..= '9' | '.' => {
                         self.end_token(TT::Punct);
                         self.new_token(next, LS::AlphaNum);
                     },
@@ -450,11 +449,11 @@ impl Lexer {
                 // since we want any token we break off
                 // to just have the first character (since we might
                 // have consumed spaces), we have this small hack
-                let mut real_pos = self.current_position;
+                let real_pos = self.current_position;
                 self.current_position = self.start_of_current.unwrap().advance_col();
                 match next {
-                    'a' ... 'z' | '$' | '_' | '<' | '>' |
-                    'A' ... 'Z' | '0' ... '9' | '.' => {
+                    'a' ..= 'z' | '$' | '_' | '<' | '>' |
+                    'A' ..= 'Z' | '0' ..= '9' | '.' => {
                         self.end_token(TT::Punct);
                         self.new_token(next, LS::AlphaNum);
                     },

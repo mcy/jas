@@ -1,13 +1,12 @@
-use ast::*;
-use consts::instructions;
-use consts::special;
-use codegen::Generator;
-use codegen::eval::{self, EvalContext, Value};
-use codegen::convert;
-use codegen::attrs;
-use codegen::labels::LabelKind;
-use sections::{MethodSection, CodeSection};
-use reporting::*;
+use crate::ast::*;
+use crate::consts::special;
+use crate::codegen::Generator;
+use crate::codegen::eval::{self, EvalContext};
+use crate::codegen::convert;
+use crate::codegen::attrs;
+use crate::codegen::labels::LabelKind;
+use crate::sections::{MethodSection, CodeSection};
+use crate::reporting::*;
 
 use classfile::raw;
 use classfile::consts as flags;
@@ -22,11 +21,11 @@ pub fn expand_method(gen: &mut Generator, method: MethodSection) -> Reported<raw
     let MethodSection {
         label: m_label,
         ident,
-        span,
         name: m_name,
         descriptor: m_desc,
         meta: metas,
         code,
+        ..
     } = method;
 
     // this is here because nll
@@ -149,7 +148,7 @@ pub fn expand_method(gen: &mut Generator, method: MethodSection) -> Reported<raw
 }
 
 #[inline]
-fn expand_code(mut cx: EvalContext, code: Vec<CodeSection>) -> Reported<(u16, Vec<raw::Instruction>)> {
+fn expand_code(mut cx: EvalContext<'_>, code: Vec<CodeSection>) -> Reported<(u16, Vec<raw::Instruction>)> {
 
     let mut reports = Reported::new();
 
@@ -208,7 +207,7 @@ fn expand_code(mut cx: EvalContext, code: Vec<CodeSection>) -> Reported<(u16, Ve
     }
 
     for code in code {
-        let CodeSection { label, ident, span, body, } = code;
+        let CodeSection { span, body, .. } = code;
         let code_index = body.len(code_len as usize) as u16;
         code_array.push(code_match!(body;
             [no_args]
