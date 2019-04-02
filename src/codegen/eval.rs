@@ -13,7 +13,7 @@ use classfile::raw;
 use std::collections::HashMap;
 use std::{u16, i16, i32};
 
-pub const FN_NONE: Option<fn(&mut EvalContext, String) -> ConstantIndex> = None;
+pub const FN_NONE: Option<fn(&mut EvalContext<'_>, String) -> ConstantIndex> = None;
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -60,7 +60,7 @@ pub struct EvalContext<'a> {
 
 impl<'b> EvalContext<'b> {
 
-    pub fn new(gen: &'b mut Generator) -> EvalContext {
+    pub fn new(gen: &'b mut Generator) -> EvalContext<'_> {
         EvalContext {
             gen,
             local_labels: None,
@@ -216,11 +216,11 @@ impl<'b> EvalContext<'b> {
     }
 
     pub fn eval_into_utf8<'a>(&'a mut self, expr: Expr) -> Reported<ConstantIndex> {
-        EvalContext::eval_into_const_index(self, expr, Some(|cx: &mut EvalContext, str| cx.gen.push_string_constant(str)))
+        EvalContext::eval_into_const_index(self, expr, Some(|cx: &mut EvalContext<'_>, str| cx.gen.push_string_constant(str)))
     }
 
     pub fn eval_into_class<'a>(&'a mut self, expr: Expr) -> Reported<ConstantIndex> {
-        EvalContext::eval_into_const_index(self.reborrow(), expr, Some(|cx: &mut EvalContext, s| {
+        EvalContext::eval_into_const_index(self.reborrow(), expr, Some(|cx: &mut EvalContext<'_>, s| {
             let first = cx.gen.push_expanded_constant(raw::Constant::Utf8(s));
             cx.gen.push_expanded_constant(raw::Constant::Class(first))
         }))

@@ -143,7 +143,7 @@ pub fn expand_class_attr(gen: &mut Generator, meta: MetaSection) -> Reported<Cla
                 name, info: raw::AttributeInfo::SourceFile(index),
             })
         }
-        MetaInstruction::Bootstrap(mut exprs) => {
+        MetaInstruction::Bootstrap(exprs) => {
             let mut iter = exprs.into_iter();
             let handle = report_try!(reports; cx.eval_into_const_index(iter.next().unwrap(), eval::FN_NONE));
             let mut args = Vec::new();
@@ -326,7 +326,7 @@ pub fn expand_method_attr(gen: &mut Generator, meta: MetaSection) -> Reported<Me
     reports.complete(res)
 }
 
-fn expand_stack_map(mut cx: EvalContext, exprs: Vec<Expr>) -> Reported<raw::StackMapFrame> {
+fn expand_stack_map(mut cx: EvalContext<'_>, exprs: Vec<Expr>) -> Reported<raw::StackMapFrame> {
     let mut reports = Reported::new();
     let mut iter = exprs.into_iter();
 

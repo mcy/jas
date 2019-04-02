@@ -325,7 +325,7 @@ impl AlphaNum {
         let mut iter = value.chars();
         let first = iter.next().unwrap();
         match first {
-            '0' ... '9' => {
+            '0' ..= '9' => {
                 if value.contains('.') ||
                     (value.contains('e') && !value.contains('x')) {
                     use std::str::FromStr;

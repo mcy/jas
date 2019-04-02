@@ -148,7 +148,7 @@ pub fn expand_method(gen: &mut Generator, method: MethodSection) -> Reported<raw
 }
 
 #[inline]
-fn expand_code(mut cx: EvalContext, code: Vec<CodeSection>) -> Reported<(u16, Vec<raw::Instruction>)> {
+fn expand_code(mut cx: EvalContext<'_>, code: Vec<CodeSection>) -> Reported<(u16, Vec<raw::Instruction>)> {
 
     let mut reports = Reported::new();
 

@@ -205,7 +205,7 @@ impl Phase for Generator {
         let mut out = Vec::new();
 
         for class in input {
-            let mut gen = Generator::new();
+            let gen = Generator::new();
             out.push(report_cont!(reports; gen.assemble_class(class)));
         }
 

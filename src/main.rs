@@ -2,8 +2,8 @@
 #[macro_use]
 extern crate clap;
 
-extern crate classfile;
-extern crate base64;
+
+
 
 #[macro_use]
 pub mod reporting;
@@ -73,7 +73,7 @@ fn main() {
                 }
                 buf.extend(path.into_iter());
                 if let Some(path) = buf.as_path().parent() {
-                    fs::create_dir_all(path);
+                    fs::create_dir_all(path).unwrap();
                 }
 
                 eprintln!("  emitting: {}", buf.display());
