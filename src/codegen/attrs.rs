@@ -3,7 +3,7 @@ use consts;
 use consts::instructions;
 use consts::special;
 use codegen::Generator;
-use codegen::eval::{self, EvalContext, Value};
+use codegen::eval::{self, EvalContext};
 use codegen::convert;
 use codegen::labels::LabelKind;
 use sections::MetaSection;
@@ -12,10 +12,8 @@ use reporting::*;
 
 use classfile::raw;
 use classfile::consts as flags;
-use classfile::indexing::*;
 
 use base64;
-use std::mem;
 
 macro_rules! wrong_target {
     ($reports:ident; $inst:expr, $expected:expr; $span:expr) => {
@@ -92,7 +90,7 @@ pub fn expand_class_attr(gen: &mut Generator, meta: MetaSection) -> Reported<Cla
     let mut reports = Reported::new();
 
     let mut cx = EvalContext::new(gen);
-    let MetaSection { label, ident, span, body } = meta;
+    let MetaSection { span, body, .. } = meta;
 
     let result = match body {
         MetaInstruction::Impl(exprs) => {
@@ -184,7 +182,7 @@ pub fn expand_field_attr(gen: &mut Generator, meta: MetaSection) -> Reported<Fie
     let mut reports = Reported::new();
 
     let mut cx = EvalContext::new(gen);
-    let MetaSection { label, ident, span, body } = meta;
+    let MetaSection { span, body, .. } = meta;
 
     let result = match body {
         MetaInstruction::Impl(..) =>  wrong_target!(reports; instructions::IMPL, instructions::CLASS; span),
@@ -251,7 +249,7 @@ pub fn expand_method_attr(gen: &mut Generator, meta: MetaSection) -> Reported<Me
     let mut reports = Reported::new();
 
     let mut cx = EvalContext::new(gen);
-    let MetaSection { label, ident, span, body } = meta;
+    let MetaSection { span, body, .. } = meta;
 
     let res = match body {
         MetaInstruction::Impl(..) => wrong_target!(reports; instructions::IMPL, instructions::CLASS; span),
@@ -369,7 +367,7 @@ fn expand_stack_map(mut cx: EvalContext, exprs: Vec<Expr>) -> Reported<raw::Stac
                         None
                     }
                 }
-                other => {
+                _other => {
                     report_error!(reports; "expected verification type, found `{}`", ident.name; ident);
                     None
                 }
@@ -503,7 +501,7 @@ fn expand_stack_map(mut cx: EvalContext, exprs: Vec<Expr>) -> Reported<raw::Stac
                                 },
                                 ref other => report_error!(reports; "expected `stack` or `locals`, found {}", other; ident),
                             }
-                            ref other => report_error!(reports; "expected identifier"; frame_type),
+                            ref _other => report_error!(reports; "expected identifier"; frame_type),
                         }
                     },
                     Some(Mode::Stack) => {
@@ -516,7 +514,7 @@ fn expand_stack_map(mut cx: EvalContext, exprs: Vec<Expr>) -> Reported<raw::Stac
                                 let _ = iter.next();
                                 mode = Some(Mode::Stack)
                             },
-                            ref other => {
+                            ref _other => {
                                 if let Some(ty) = parse_vty(&mut cx, &mut iter, &mut reports, &frame_type.span) {
                                     stack.push(ty);
                                 }
@@ -533,7 +531,7 @@ fn expand_stack_map(mut cx: EvalContext, exprs: Vec<Expr>) -> Reported<raw::Stac
                                 let _ = iter.next();
                                 mode = Some(Mode::Stack)
                             },
-                            ref other => {
+                            ref _other => {
                                 if let Some(ty) = parse_vty(&mut cx, &mut iter, &mut reports, &frame_type.span) {
                                     locals.push(ty);
                                 }

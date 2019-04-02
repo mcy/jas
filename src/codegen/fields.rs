@@ -1,8 +1,5 @@
-use ast::*;
-use consts::instructions;
 use codegen::Generator;
-use codegen::eval::{self, EvalContext, Value};
-use codegen::convert;
+use codegen::eval::EvalContext;
 use codegen::attrs;
 use sections::FieldSection;
 use reporting::*;
@@ -19,10 +16,10 @@ pub fn expand_field(gen: &mut Generator, field: FieldSection) -> Reported<raw::F
     let FieldSection {
         label: f_label,
         ident,
-        span,
         name: f_name,
         descriptor: f_desc,
         meta: metas,
+        ..
     } = field;
 
     let name = if let Some(name) = f_name {

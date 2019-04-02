@@ -1,8 +1,7 @@
 use ast::*;
-use consts::instructions;
 use consts::special;
 use codegen::Generator;
-use codegen::eval::{self, EvalContext, Value};
+use codegen::eval::{self, EvalContext};
 use codegen::convert;
 use codegen::attrs;
 use codegen::labels::LabelKind;
@@ -22,11 +21,11 @@ pub fn expand_method(gen: &mut Generator, method: MethodSection) -> Reported<raw
     let MethodSection {
         label: m_label,
         ident,
-        span,
         name: m_name,
         descriptor: m_desc,
         meta: metas,
         code,
+        ..
     } = method;
 
     // this is here because nll
@@ -208,7 +207,7 @@ fn expand_code(mut cx: EvalContext, code: Vec<CodeSection>) -> Reported<(u16, Ve
     }
 
     for code in code {
-        let CodeSection { label, ident, span, body, } = code;
+        let CodeSection { span, body, .. } = code;
         let code_index = body.len(code_len as usize) as u16;
         code_array.push(code_match!(body;
             [no_args]

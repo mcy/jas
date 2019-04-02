@@ -15,7 +15,7 @@ use base64;
 pub fn disassemble_from_file<P: AsRef<Path>>(path: P) -> io::Result<String> {
 
     let abs = fs::canonicalize(path)?;
-    let mut file = fs::OpenOptions::new().read(true).open(abs.as_path())?;
+    let file = fs::OpenOptions::new().read(true).open(abs.as_path())?;
     let mut bytes = Vec::<u8>::new();
     BufReader::new(file).read_to_end(&mut bytes)?;
     let class = raw::io::parse_class(&mut bytes.as_slice())?;
@@ -153,10 +153,10 @@ pub fn disassemble_class(path: &str, class: &raw::Class) -> String {
 
     for field in &class.fields {
         let raw::Field {
-            ref flags,
             ref name,
             ref descriptor,
             ref attributes,
+            ..
         } = *field;
 
         {
@@ -214,10 +214,10 @@ pub fn disassemble_class(path: &str, class: &raw::Class) -> String {
 
     for method in &class.methods {
         let raw::Method {
-            ref flags,
             ref name,
             ref descriptor,
             ref attributes,
+            ..
         } = *method;
 
         {
@@ -262,8 +262,8 @@ pub fn disassemble_class(path: &str, class: &raw::Class) -> String {
             let raw::Attribute { ref name, ref info } = *attr;
             match *info {
                 raw::AttributeInfo::Code {
-                    ref max_stack, ref max_locals, ref code_len,
-                    ref code, ref exception_table, ref attributes,
+                    ref max_stack, ref max_locals,
+                    ref code, ref exception_table, ..
                 } => {
                     lines.push(format!("{: <15} {:#06x}", instructions::STACK, max_stack.0));
                     lines.push(format!("{: <15} {:#06x}", instructions::LOCALS, max_locals.0));

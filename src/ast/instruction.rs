@@ -77,7 +77,7 @@ impl Instruction {
                         )
                     };
                     let SourceLine {
-                        label, instruction, args, span,
+                        label, instruction, span, ..
                     } = line;
                     result = Some(Instruction {
                         label,
@@ -103,7 +103,7 @@ impl Instruction {
                         }
                     };
                     let SourceLine {
-                        label, instruction, args, span,
+                        label, instruction, span, ..
                     } = line;
                     result = Some(Instruction {
                         label,
@@ -120,7 +120,7 @@ impl Instruction {
                 if expected_args(&mut reports, &line, 0, 0) {
                     let op = $name;
                     let SourceLine {
-                        label, instruction, args, span,
+                        label, instruction, span, ..
                     } = line;
                     result = Some(Instruction {
                         label,
@@ -145,7 +145,7 @@ impl Instruction {
                 if min_args(&mut reports, &line, $min) {
                     let op = $name(line.args.clone());
                     let SourceLine {
-                        label, instruction, args, span,
+                        label, instruction, span, ..
                     } = line;
                     result = Some(Instruction {
                         label,
@@ -429,7 +429,7 @@ impl Instruction {
                         }
                     };
                     let SourceLine {
-                        label, instruction, args, span,
+                        label, instruction, span, ..
                     } = line;
                     result = Some(Instruction {
                         label,
@@ -465,7 +465,7 @@ impl Instruction {
                         }
                     };
                     let SourceLine {
-                        label, instruction, args, span,
+                        label, instruction, span, ..
                     } = line;
                     result = Some(Instruction {
                         label,
@@ -996,8 +996,8 @@ impl CodeInstruction {
             RetSub(..) => 2,
 
             LookupSwitch {
-                ref default_offset,
-                ref match_table
+                ref match_table,
+                ..
             } => {
                 let mut bytes = prev + 1;
                 while bytes % 4 != 0 {
@@ -1009,9 +1009,8 @@ impl CodeInstruction {
             },
 
             TableSwitch {
-                ref default_offset,
-                ref match_range,
                 ref offset_table,
+                ..
             } => {
                 let mut bytes = prev + 1;
                 while bytes % 4 != 0 {

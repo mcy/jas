@@ -45,7 +45,7 @@ pub fn expand_constant(gen: &mut Generator, constant: ConstantSection) -> Report
         }}
     }
 
-    let ConstantSection { label, ident, span, body } = constant;
+    let ConstantSection { body, .. } = constant;
 
     let constant = match body {
         ConstantInstruction::ClassRef(class) => {

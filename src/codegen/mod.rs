@@ -140,12 +140,12 @@ impl Generator {
         report_try!(reports; labels::expand_labels(&mut self, &section));
 
         let ClassSection {
-            label, ident, span,
             this_class, super_class,
             top_level,
             constants,
             fields,
             methods,
+            ..
         } = section;
 
         report_try!(reports; attrs::expand_this_and_super(&mut self, this_class, super_class));

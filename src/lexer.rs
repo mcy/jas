@@ -1,6 +1,5 @@
 use std::mem;
 use std::rc::Rc;
-use std::result;
 use std::vec;
 
 use phase::Phase;

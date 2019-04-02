@@ -178,7 +178,7 @@ impl Parser {
             let mut reports = Reported::new();
             match stack.pop() {
                 Some(StackElement::Expr(expr)) => reports.complete(expr),
-                Some(StackElement::BinOp(op, span)) => {
+                Some(StackElement::BinOp(op, _span)) => {
                     // backwards, since we're popping off the back
                     let second = report_try!(reports; consume_output(stack));
                     let first = report_try!(reports; consume_output(stack));
@@ -214,7 +214,7 @@ impl Parser {
             let maybe_colon = self.token_stack.pop();
             if maybe_colon.is_some() && maybe_colon.as_ref().unwrap().value == ":" {
                 let instruction = report_try!(reports; self.consume_ident());
-                let maybe_colon = maybe_colon.unwrap();
+                let _maybe_colon = maybe_colon.unwrap();
                 let span = maybe_label.span.extend_to(&instruction);
                 (Some(maybe_label), instruction, span)
             } else {

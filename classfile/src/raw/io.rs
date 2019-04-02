@@ -143,7 +143,7 @@ fn parse_constant<R: Read>(bytes: &mut R, index: u16) -> Result<(Constant, bool)
     Ok((constant, is_wide_constant))
 }
 
-fn parse_field<R: Read>(bytes: &mut R, index: u16, constants: &Vec<Constant>) -> Result<Field> {
+fn parse_field<R: Read>(bytes: &mut R, _index: u16, constants: &Vec<Constant>) -> Result<Field> {
     let flags = consts::field::Flags::from_bits(bytes.read_u16::<BigEndian>()?);
     let name = bytes.read_constant_index()?;
     let descriptor = bytes.read_constant_index()?;
@@ -157,7 +157,7 @@ fn parse_field<R: Read>(bytes: &mut R, index: u16, constants: &Vec<Constant>) ->
     })
 }
 
-fn parse_method<R: Read>(bytes: &mut R, index: u16, constants: &Vec<Constant>) -> Result<Method> {
+fn parse_method<R: Read>(bytes: &mut R, _index: u16, constants: &Vec<Constant>) -> Result<Method> {
     let flags = consts::method::Flags::from_bits(bytes.read_u16::<BigEndian>()?);
     let name = bytes.read_constant_index()?;
     let descriptor = bytes.read_constant_index()?;
@@ -832,7 +832,7 @@ fn emit_field<W: Write>(field: &Field, out: &mut W) -> Result<()> {
     out.write_constant_index(&field.descriptor)?;
     out.write_u16::<BigEndian>(field.attributes.len() as u16)?;
     for attr in field.attributes.iter() {
-        emit_attribute(attr, out);
+        emit_attribute(attr, out)?;
     }
     Ok(())
 }
@@ -879,7 +879,7 @@ fn emit_attribute<W: Write>(attribute: &Attribute, out: &mut W) -> Result<()> {
             out.write_u16::<BigEndian>(frames.len() as u16)?;
             #[inline]
             fn emit_ty<W: Write>(ty: &VerificationType, out: &mut W) -> Result<()> {
-                out.write_u8(ty.tag());
+                out.write_u8(ty.tag())?;
                 match *ty {
                     VerificationType::Object(ref index) => out.write_constant_index(index)?,
                     VerificationType::Uninitialized(ref index) => out.write_code_index(index)?,
@@ -1050,14 +1050,14 @@ fn emit_code<W: Write>(instructions: &Vec<Instruction>, out: &mut W) -> Result<(
         out.write_u8(op.opcode())?;
         use super::code::Instruction::*;
         match *op {
-            
+
             PushByte(byte) => out.write_i8(byte)?,
             PushShort(short) => out.write_i16::<BigEndian>(short)?,
-            
+
             LoadConstant(ref index) => out.write_half_constant_index(index)?,
             WideLoadConstant(ref index) => out.write_constant_index(index)?,
             WideLoadWideConstant(ref index) => out.write_constant_index(index)?,
-            
+
             LoadInt(ref index) => out.write_var_index(index)?,
             LoadLong(ref index) => out.write_var_index(index)?,
             LoadFloat(ref index) => out.write_var_index(index)?,
@@ -1072,7 +1072,7 @@ fn emit_code<W: Write>(instructions: &Vec<Instruction>, out: &mut W) -> Result<(
 
             IncInt(ref index, byte) => {
                 out.write_var_index(index)?;
-                out.write_i8(byte)?;  
+                out.write_i8(byte)?;
             },
 
             IfIntEq0(ref index) => out.write_code_offset(index)?,
@@ -1091,11 +1091,11 @@ fn emit_code<W: Write>(instructions: &Vec<Instruction>, out: &mut W) -> Result<(
 
             IfRefEq(ref index) => out.write_code_offset(index)?,
             IfRefNe(ref index) => out.write_code_offset(index)?,
-            
+
             Goto(ref index) => out.write_code_offset(&index)?,
             JumpSub(ref index) => out.write_code_offset(index)?,
             RetSub(ref index) => out.write_var_index(index)?,
-            
+
             TableSwitch { ref default_offset, ref match_range, ref offset_table, } => {
                 while out.count % 4 != 0 {
                     out.write_u8(0)?;
@@ -1103,7 +1103,7 @@ fn emit_code<W: Write>(instructions: &Vec<Instruction>, out: &mut W) -> Result<(
                 out.write_wide_code_offset(default_offset)?;
                 out.write_i32::<BigEndian>(match_range.0)?;
                 out.write_i32::<BigEndian>(match_range.1)?;
-                
+
                 for ref offset in offset_table.iter() {
                     out.write_wide_code_offset(offset)?;
                 }
@@ -1125,7 +1125,7 @@ fn emit_code<W: Write>(instructions: &Vec<Instruction>, out: &mut W) -> Result<(
             PutStaticField(ref index) => out.write_constant_index(index)?,
             GetField(ref index) => out.write_constant_index(index)?,
             PutField(ref index) => out.write_constant_index(index)?,
-            
+
             InvokeVirtual(ref index) => out.write_constant_index(index)?,
             InvokeSpecial(ref index) => out.write_constant_index(index)?,
             InvokeStatic(ref index) => out.write_constant_index(index)?,
