@@ -1,8 +1,8 @@
-use codegen::Generator;
-use codegen::eval::EvalContext;
-use codegen::attrs;
-use sections::FieldSection;
-use reporting::*;
+use crate::codegen::Generator;
+use crate::codegen::eval::EvalContext;
+use crate::codegen::attrs;
+use crate::sections::FieldSection;
+use crate::reporting::*;
 
 use classfile::raw;
 use classfile::consts as flags;

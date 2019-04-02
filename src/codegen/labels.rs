@@ -1,7 +1,7 @@
-use ast::*;
-use codegen::Generator;
-use reporting::*;
-use sections::*;
+use crate::ast::*;
+use crate::codegen::Generator;
+use crate::reporting::*;
+use crate::sections::*;
 
 #[derive(Clone, Copy, Debug)]
 pub enum LabelKind {

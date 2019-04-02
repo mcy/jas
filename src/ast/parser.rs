@@ -1,9 +1,9 @@
 
-use ast::*;
-use lexer::*;
-use phase::Phase;
-use reporting::*;
-use source_file::Span;
+use crate::ast::*;
+use crate::lexer::*;
+use crate::phase::Phase;
+use crate::reporting::*;
+use crate::source_file::Span;
 
 pub struct Parser {
     token_stack: Vec<Token>,

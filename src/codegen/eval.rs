@@ -1,11 +1,11 @@
-use ast::*;
-use codegen::Generator;
-use codegen::labels::LabelKind;
-use codegen::attrs;
-use codegen::constants;
-use reporting::*;
-use sections::*;
-use source_file::*;
+use crate::ast::*;
+use crate::codegen::Generator;
+use crate::codegen::labels::LabelKind;
+use crate::codegen::attrs;
+use crate::codegen::constants;
+use crate::reporting::*;
+use crate::sections::*;
+use crate::source_file::*;
 
 use classfile::indexing::*;
 use classfile::raw;

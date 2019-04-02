@@ -2,9 +2,9 @@ use std::mem;
 use std::rc::Rc;
 use std::vec;
 
-use phase::Phase;
-use source_file::*;
-use reporting::*;
+use crate::phase::Phase;
+use crate::source_file::*;
+use crate::reporting::*;
 
 #[derive(Clone, Debug)]
 pub struct Token {

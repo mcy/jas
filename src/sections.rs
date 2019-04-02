@@ -1,7 +1,7 @@
-use ast::*;
-use phase::Phase;
-use reporting::*;
-use source_file::Span;
+use crate::ast::*;
+use crate::phase::Phase;
+use crate::reporting::*;
+use crate::source_file::Span;
 
 // represents a pile of instructions
 // contiguously making up a class

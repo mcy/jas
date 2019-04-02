@@ -1,10 +1,10 @@
-use ast::*;
-use consts::special;
-use codegen::Generator;
-use codegen::eval::{self, EvalContext, Value};
-use codegen::convert;
-use sections::ConstantSection;
-use reporting::*;
+use crate::ast::*;
+use crate::consts::special;
+use crate::codegen::Generator;
+use crate::codegen::eval::{self, EvalContext, Value};
+use crate::codegen::convert;
+use crate::sections::ConstantSection;
+use crate::reporting::*;
 
 use classfile::raw;
 

@@ -1,7 +1,7 @@
 
-use ast::*;
-use reporting::*;
-use source_file::Span;
+use crate::ast::*;
+use crate::reporting::*;
+use crate::source_file::Span;
 
 #[derive(Clone, Debug)]
 pub struct Instruction {
@@ -14,7 +14,7 @@ pub struct Instruction {
 impl Instruction {
 
     pub fn from_source(line: SourceLine) -> Reported<Instruction> {
-        use consts::instructions as inst;
+        use crate::consts::instructions as inst;
 
         use self::ItemInstruction as ItemI;
         use self::MetaInstruction as MetaI;

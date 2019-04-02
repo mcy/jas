@@ -1,12 +1,12 @@
-use ast::*;
-use consts::special;
-use codegen::Generator;
-use codegen::eval::{self, EvalContext};
-use codegen::convert;
-use codegen::attrs;
-use codegen::labels::LabelKind;
-use sections::{MethodSection, CodeSection};
-use reporting::*;
+use crate::ast::*;
+use crate::consts::special;
+use crate::codegen::Generator;
+use crate::codegen::eval::{self, EvalContext};
+use crate::codegen::convert;
+use crate::codegen::attrs;
+use crate::codegen::labels::LabelKind;
+use crate::sections::{MethodSection, CodeSection};
+use crate::reporting::*;
 
 use classfile::raw;
 use classfile::consts as flags;

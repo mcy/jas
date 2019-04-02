@@ -18,7 +18,7 @@ pub mod sections;
 pub mod source_file;
 pub mod util;
 
-use phase::Phase;
+use crate::phase::Phase;
 
 use classfile::raw;
 

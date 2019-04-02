@@ -1,6 +1,6 @@
-use consts::instructions;
-use consts::flags;
-use consts::special;
+use crate::consts::instructions;
+use crate::consts::flags;
+use crate::consts::special;
 
 use classfile::raw;
 

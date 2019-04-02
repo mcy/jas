@@ -7,10 +7,10 @@ pub mod eval;
 
 pub mod convert;
 
-use codegen::labels::LabelKind;
-use phase::Phase;
-use sections::ClassSection;
-use reporting::*;
+use crate::codegen::labels::LabelKind;
+use crate::phase::Phase;
+use crate::sections::ClassSection;
+use crate::reporting::*;
 
 use classfile::raw;
 use classfile::indexing::*;
@@ -22,26 +22,26 @@ use std::mem;
 #[derive(Debug)]
 pub struct Generator {
 
-    pub(in codegen) minor_major_version: Option<(u16, u16)>,
+    pub(in crate::codegen) minor_major_version: Option<(u16, u16)>,
 
-    pub(in codegen) labels: HashMap<String, LabelKind>,
+    pub(in crate::codegen) labels: HashMap<String, LabelKind>,
 
-    pub(in codegen) declared_constants: Vec<raw::Constant>,
-    pub(in codegen) declared_count: usize,
-    pub(in codegen) expanded_constants: Vec<raw::Constant>,
+    pub(in crate::codegen) declared_constants: Vec<raw::Constant>,
+    pub(in crate::codegen) declared_count: usize,
+    pub(in crate::codegen) expanded_constants: Vec<raw::Constant>,
 
-    pub(in codegen) flags: Option<flags::class::Flags>,
+    pub(in crate::codegen) flags: Option<flags::class::Flags>,
 
-    pub(in codegen) this_class: Option<ConstantIndex>,
-    pub(in codegen) super_class: Option<ConstantIndex>,
-    pub(in codegen) interfaces: Vec<ConstantIndex>,
+    pub(in crate::codegen) this_class: Option<ConstantIndex>,
+    pub(in crate::codegen) super_class: Option<ConstantIndex>,
+    pub(in crate::codegen) interfaces: Vec<ConstantIndex>,
 
-    pub(in codegen) fields: Vec<raw::Field>,
-    pub(in codegen) methods: Vec<raw::Method>,
+    pub(in crate::codegen) fields: Vec<raw::Field>,
+    pub(in crate::codegen) methods: Vec<raw::Method>,
 
-    pub(in codegen) attributes: Vec<raw::Attribute>,
+    pub(in crate::codegen) attributes: Vec<raw::Attribute>,
 
-    pub(in codegen) bootstrap_table: Vec<raw::BootstrapMethod>,
+    pub(in crate::codegen) bootstrap_table: Vec<raw::BootstrapMethod>,
 }
 
 impl Generator {
@@ -71,7 +71,7 @@ impl Generator {
         }
     }
 
-    pub(in codegen) fn get_constant(&self, index: ConstantIndex) -> Option<&raw::Constant> {
+    pub(in crate::codegen) fn get_constant(&self, index: ConstantIndex) -> Option<&raw::Constant> {
         let index = index.0 as usize;
         if index < self.declared_count {
             Some(&self.declared_constants[index - 1])
@@ -82,7 +82,7 @@ impl Generator {
         }
     }
 
-    pub(in codegen) fn push_declared_constant(&mut self, constant: raw::Constant) {
+    pub(in crate::codegen) fn push_declared_constant(&mut self, constant: raw::Constant) {
         let is_wide = match constant {
             raw::Constant::Long(..) |
             raw::Constant::Double(..) => true,
@@ -93,7 +93,7 @@ impl Generator {
         if is_wide { self.declared_constants.push(raw::Constant::WidePlaceholder) };
     }
 
-    pub(in codegen) fn push_expanded_constant(&mut self, constant: raw::Constant) -> ConstantIndex {
+    pub(in crate::codegen) fn push_expanded_constant(&mut self, constant: raw::Constant) -> ConstantIndex {
 
         if let Some(index) = self.declared_constants.iter().position(|x| x == &constant) {
             ConstantIndex(index as u16 + 1)
@@ -117,7 +117,7 @@ impl Generator {
         }
     }
 
-    pub(in codegen) fn push_string_constant(&mut self, str: String) -> ConstantIndex {
+    pub(in crate::codegen) fn push_string_constant(&mut self, str: String) -> ConstantIndex {
         self.push_expanded_constant(raw::Constant::Utf8(str))
     }
 
